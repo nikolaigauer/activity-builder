@@ -1,0 +1,90 @@
+# Roadmap
+
+Ideas and future directions parked here for reference. Not committed to any timeline.
+
+---
+
+## Re-reflection & Student Growth Features
+
+The core pedagogical insight: ePortfolios derive their value from students being able to
+look *back* at past work and notice change, patterns, and recurring ideas. Most platforms
+(PebblePad, Mahara) expect students to go looking for connections themselves — very few do.
+The opportunity here is to *surface* connections automatically using data we already have:
+timestamps, instructor-applied auto-tags, and student-applied tags.
+
+### "You wrote about this before" (highest value, medium effort)
+When a student lands on a reflection page, query their past submissions that share one or
+more of the current page's auto-tags. Surface 1–3 excerpts quietly in a sidebar or below
+the prompt — a gentle nudge toward re-reflection rather than a disruptive popup.
+- Plugin provides the query logic and a shortcode/block
+- Theme places it in the appropriate template position
+
+### Tag Cloud (medium value, low effort)
+Query all of a student's submissions, group by tag, render size proportional to frequency.
+A live "what I've been thinking about" widget for the student's portfolio homepage.
+Scoped to current author on `/author/` pages.
+- Shortcode: `[reflsub_tag_cloud]`
+- Plugin provides data + shortcode; theme styles and places it
+
+### Chronological Timeline (medium value, medium effort)
+Student's submissions laid out on a timeline, filterable by tag. Makes growth over time
+visible at a glance. Pure CSS timeline or Chart.js.
+- Shortcode: `[reflsub_timeline]`
+- Could be the centrepiece of the portfolio homepage
+
+### Tag Co-occurrence Network (ambitious, longer term)
+A D3.js node graph where nodes are tags and edges form when two tags co-occur in the same
+submission. As posts accumulate, the network grows. Visually striking and pedagogically
+powerful for exposing conceptual relationships the student may not have consciously noticed.
+- Would need D3.js bundled or loaded from CDN
+- Student-facing block on portfolio page
+
+---
+
+## Architecture Notes: Plugin vs. Theme Split
+
+The plugin owns the **data and query logic** — submissions, tags, sections, privacy.
+The theme owns the **presentation context** — `/author/` scoping, layout, placement.
+
+Correct split:
+- Plugin provides shortcodes/blocks (`[reflsub_tag_cloud]`, `[reflsub_timeline]`, etc.)
+- Theme places these in template parts (sidebar, homepage, author archive)
+- All queries in the plugin can be author-scoped using `get_queried_object()` on author
+  archive pages, so they work naturally within the `/author/username/` structure
+
+---
+
+## ACF Dependency Removal
+
+The plugin is already in a transitional state — pages created via the builder store all
+data in `_reflsub_sections` (JSON post meta) and no longer need ACF at all. ACF is only
+hit via the "legacy path" in `reflection-form.php` for pages originally built in the
+ePortfolio theme before the plugin was extracted.
+
+Removing the ACF dependency is feasible and would make the plugin fully standalone:
+- Replace `get_field( 'foo', $id )` → `get_post_meta( $id, 'foo', true )` throughout
+  the legacy path (underlying meta keys are identical — ACF is just a wrapper)
+- Remove `acf-fields.php` field group registration
+- Add a one-time migration notice for any pre-existing ACF-configured pages
+
+Do this before a public/ETUG release so the plugin has zero required dependencies.
+
+---
+
+## Naming & Licensing
+
+- Plugin name needs revisiting before public release
+- "Reflection Page" terminology may need to be more generic ("Activity Page"? "Prompt Page"?)
+- License: GPL-2.0-or-later (already declared in plugin header — just needs a LICENSE file)
+- Add readme.txt in WordPress plugin directory format for potential wp.org submission
+
+---
+
+## ePortfolio Theme Cleanup
+
+The theme (`eportfolio-theme-2`) contains an earlier version of the reflection prompt
+feature built directly into the theme before the plugin extraction decision. Needs:
+- Audit of overlapping functionality
+- Remove or deprecate theme-side ACF field group registration once plugin is standalone
+- Ensure advanced privacy controls and `/author/` layout remain intact and independent
+  of the plugin's features
