@@ -1173,13 +1173,6 @@ function reflsub_save_reflection_page() {
     update_post_meta( $saved_id, 'allow_resubmission',  $allow_resub );
     update_post_meta( $saved_id, '_reflsub_auto_tags',  $auto_tags_val );
 
-    // Keep ACF field mapping in sync (for legacy shortcode path)
-    if ( function_exists( 'update_field' ) ) {
-        update_field( 'is_reflection_page', 1,            $saved_id );
-        update_field( 'submission_privacy',  $privacy,    $saved_id );
-        update_field( 'allow_resubmission',  $allow_resub, $saved_id );
-    }
-
     $saved_flag = $is_new ? 'created' : 'updated';
     wp_redirect( admin_url( 'admin.php?page=reflsub-pages&reflsub_saved=' . $saved_flag ) );
     exit;

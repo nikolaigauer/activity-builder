@@ -84,7 +84,6 @@ register_deactivation_hook( __FILE__, function () {
 add_action( 'plugins_loaded', 'reflsub_load_modules' );
 function reflsub_load_modules() {
     $modules = array(
-        'acf-fields',       // ACF field group registration (reflection prompts, privacy, etc.)
         'reflection-form',  // [reflection_form] shortcode + init submission handler
         'admin-page',       // Top-level menu + Submissions submenu + toolbar item
         'page-builder',     // Reflection Pages list + section-based page builder

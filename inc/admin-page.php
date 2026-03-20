@@ -288,19 +288,10 @@ function reflsub_create_reflection_page() {
         wp_die( 'Could not create page: ' . esc_html( $page_id->get_error_message() ) );
     }
 
-    // Set ACF field values. update_field() stores the field-key → meta-key mapping ACF needs.
-    if ( function_exists( 'update_field' ) ) {
-        update_field( 'is_reflection_page',  1,         $page_id );
-        update_field( 'submission_privacy',  'publish', $page_id );
-        update_field( 'allow_resubmission',  0,         $page_id );
-        update_field( 'reflection_prompt_1', 'Describe your experience with this week\'s material.', $page_id );
-    } else {
-        // Fallback: ACF not yet loaded at this point (rare edge case)
-        update_post_meta( $page_id, 'is_reflection_page',  1 );
-        update_post_meta( $page_id, 'submission_privacy',  'publish' );
-        update_post_meta( $page_id, 'allow_resubmission',  0 );
-        update_post_meta( $page_id, 'reflection_prompt_1', 'Describe your experience with this week\'s material.' );
-    }
+    update_post_meta( $page_id, 'is_reflection_page',  1 );
+    update_post_meta( $page_id, 'submission_privacy',  'publish' );
+    update_post_meta( $page_id, 'allow_resubmission',  0 );
+    update_post_meta( $page_id, 'reflection_prompt_1', 'Describe your experience with this week\'s material.' );
 
     wp_redirect( get_edit_post_link( $page_id, 'raw' ) );
     exit;

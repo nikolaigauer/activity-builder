@@ -185,13 +185,9 @@ function reflsub_handle_reflection_submission() {
         return; // handler calls exit
     }
 
-    // ── Legacy ACF path ───────────────────────────────────────────────────────
-    if ( ! function_exists( 'get_field' ) ) {
-        wp_die( 'Advanced Custom Fields is required for reflection submissions.' );
-    }
-
+    // ── Legacy path (pre-builder pages, data stored as plain post meta) ──────────
     // ── Duplicate guard ───────────────────────────────────────────────────────
-    $allow_resubmission = get_field( 'allow_resubmission', $page_id );
+    $allow_resubmission = get_post_meta( $page_id, 'allow_resubmission', true );
     if ( ! $allow_resubmission ) {
         $existing = reflsub_get_existing_submission( $user_id, $page_id );
         if ( $existing ) {
@@ -206,16 +202,16 @@ function reflsub_handle_reflection_submission() {
     $response_3 = sanitize_textarea_field( $_POST['reflection_response_3'] ?? '' );
 
     $video_url = '';
-    if ( get_field( 'allow_video_url', $page_id ) ) {
+    if ( get_post_meta( $page_id, 'allow_video_url', true ) ) {
         $video_url = esc_url_raw( trim( $_POST['reflection_video_url'] ?? '' ) );
     }
 
     $embed_code = '';
-    if ( get_field( 'allow_embed', $page_id ) ) {
+    if ( get_post_meta( $page_id, 'allow_embed', true ) ) {
         $embed_code = reflsub_sanitize_embed_code( $_POST['reflection_embed'] ?? '' );
     }
 
-    $has_image = get_field( 'allow_image_upload', $page_id ) &&
+    $has_image = get_post_meta( $page_id, 'allow_image_upload', true ) &&
                  ! empty( $_FILES['reflection_image']['name'] );
     $has_text  = $response_1 || $response_2 || $response_3;
 
@@ -225,9 +221,9 @@ function reflsub_handle_reflection_submission() {
     }
 
     // ── Build post content ────────────────────────────────────────────────────
-    $prompt_1 = get_field( 'reflection_prompt_1', $page_id );
-    $prompt_2 = get_field( 'reflection_prompt_2', $page_id );
-    $prompt_3 = get_field( 'reflection_prompt_3', $page_id );
+    $prompt_1 = get_post_meta( $page_id, 'reflection_prompt_1', true );
+    $prompt_2 = get_post_meta( $page_id, 'reflection_prompt_2', true );
+    $prompt_3 = get_post_meta( $page_id, 'reflection_prompt_3', true );
 
     $content_parts = array();
 
@@ -277,7 +273,7 @@ function reflsub_handle_reflection_submission() {
     $post_content = implode( "\n\n", $content_parts );
 
     // ── Post status and title ─────────────────────────────────────────────────
-    $privacy     = get_field( 'submission_privacy', $page_id ) ?: 'publish';
+    $privacy     = get_post_meta( $page_id, 'submission_privacy', true ) ?: 'publish';
     $post_status = in_array( $privacy, array( 'publish', 'private', 'pending' ), true )
         ? $privacy
         : 'publish';
@@ -326,9 +322,7 @@ function reflsub_handle_reflection_submission() {
 
     // ── Content-type taxonomy ─────────────────────────────────────────────────
     if ( taxonomy_exists( 'content-type' ) ) {
-        $ct_label = function_exists( 'get_field' )
-            ? ( trim( get_field( 'content_type_label', $page_id ) ) ?: 'Reflection' )
-            : 'Reflection';
+        $ct_label = trim( get_post_meta( $page_id, 'content_type_label', true ) ) ?: 'Reflection';
         $term = term_exists( $ct_label, 'content-type' );
 
         if ( ! $term ) {
@@ -609,11 +603,8 @@ function reflsub_reflection_form_shortcode( $atts ) {
 
     $page_id = get_the_ID();
 
-    // Guard: page must be flagged as a reflection page (meta or ACF)
+    // Guard: page must be flagged as a reflection page
     $is_reflection = get_post_meta( $page_id, 'is_reflection_page', true );
-    if ( ! $is_reflection && function_exists( 'get_field' ) ) {
-        $is_reflection = get_field( 'is_reflection_page', $page_id );
-    }
     if ( ! $is_reflection ) {
         return '';
     }
@@ -642,18 +633,14 @@ function reflsub_reflection_form_shortcode( $atts ) {
         return '';
     }
 
-    // ── Legacy ACF path ───────────────────────────────────────────────────────
-    if ( ! function_exists( 'get_field' ) ) {
-        return '<p><em>Advanced Custom Fields is required to display this form.</em></p>';
-    }
-
-    $prompt_1    = get_field( 'reflection_prompt_1',    $page_id );
-    $prompt_2    = get_field( 'reflection_prompt_2',    $page_id );
-    $prompt_3    = get_field( 'reflection_prompt_3',    $page_id );
-    $allow_image = get_field( 'allow_image_upload',     $page_id );
-    $allow_video = get_field( 'allow_video_url',        $page_id );
-    $allow_embed = get_field( 'allow_embed',            $page_id );
-    $allow_resub = get_field( 'allow_resubmission',     $page_id );
+    // ── Legacy path (pre-builder pages, data stored as plain post meta) ──────────
+    $prompt_1    = get_post_meta( $page_id, 'reflection_prompt_1', true );
+    $prompt_2    = get_post_meta( $page_id, 'reflection_prompt_2', true );
+    $prompt_3    = get_post_meta( $page_id, 'reflection_prompt_3', true );
+    $allow_image = get_post_meta( $page_id, 'allow_image_upload',  true );
+    $allow_video = get_post_meta( $page_id, 'allow_video_url',     true );
+    $allow_embed = get_post_meta( $page_id, 'allow_embed',         true );
+    $allow_resub = get_post_meta( $page_id, 'allow_resubmission',  true );
 
     // ── Success state ──────────────────────────────────────────────────────────
     if ( isset( $_GET['reflection_submitted'] ) ) {
