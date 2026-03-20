@@ -294,90 +294,100 @@ function reflsub_render_page_builder() {
             <div class="reflsub-card">
                 <div class="reflsub-card-header">Page Settings</div>
                 <div class="reflsub-card-body">
+                    <div class="reflsub-builder-columns">
 
-                    <div class="reflsub-field">
-                        <label for="reflsub-page-title">Page Title</label>
-                        <input type="text" id="reflsub-page-title" name="reflsub_page_title"
-                               value="<?php echo esc_attr( $page_title ); ?>"
-                               placeholder="e.g. Week 3 Reflection">
-                    </div>
+                        <!-- ── Main column ── -->
+                        <div class="reflsub-col-main">
 
-                    <div class="reflsub-field">
-                        <label for="reflsub-intro-text">
-                            Intro Text <span class="reflsub-optional">optional</span>
-                        </label>
-                        <textarea id="reflsub-intro-text" name="reflsub_intro_text" rows="3"
-                                  placeholder="Optional description shown above the student form…"><?php echo esc_textarea( $intro_text ); ?></textarea>
-                        <span class="reflsub-field-desc">Displayed above the form on the page.</span>
-                    </div>
-
-                    <div class="reflsub-field-row">
-                        <div class="reflsub-field">
-                            <label for="reflsub-page-status">Page Status</label>
-                            <select id="reflsub-page-status" name="reflsub_page_status">
-                                <option value="publish" <?php selected( $page_status, 'publish' ); ?>>Published</option>
-                                <option value="draft"   <?php selected( $page_status, 'draft' ); ?>>Draft</option>
-                                <option value="private" <?php selected( $page_status, 'private' ); ?>>Private</option>
-                            </select>
-                            <span class="reflsub-field-desc">Controls whether students can access the page.</span>
-                        </div>
-                        <div class="reflsub-field">
-                            <label for="reflsub-privacy">Submission Privacy</label>
-                            <select id="reflsub-privacy" name="reflsub_privacy">
-                                <option value="publish" <?php selected( $privacy, 'publish' ); ?>>Publish — visible to all</option>
-                                <option value="private" <?php selected( $privacy, 'private' ); ?>>Private — student only</option>
-                                <option value="pending" <?php selected( $privacy, 'pending' ); ?>>Pending Review</option>
-                            </select>
-                            <span class="reflsub-field-desc">Status applied to each submission.</span>
-                        </div>
-                    </div>
-
-                    <div class="reflsub-field-row">
-                        <div class="reflsub-field">
-                            <label for="reflsub-parent">
-                                Parent Page <span class="reflsub-optional">optional</span>
-                            </label>
-                            <select id="reflsub-parent" name="reflsub_parent_id">
-                                <option value="0">— Standalone —</option>
-                                <?php foreach ( $all_pages as $p ) : ?>
-                                <option value="<?php echo esc_attr( $p->ID ); ?>" <?php selected( $parent_id, $p->ID ); ?>>
-                                    <?php echo esc_html( $p->post_title ?: '(no title) #' . $p->ID ); ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <span class="reflsub-field-desc">
-                                Nest under a parent page so it auto-appears in the sidebar menu and groups with related pages in the Progress view.
-                            </span>
-                            <button type="button" id="reflsub-new-parent-toggle" class="reflsub-new-parent-toggle"
-                                    data-nonce="<?php echo esc_attr( wp_create_nonce( 'reflsub_create_parent_page' ) ); ?>">
-                                + New parent page
-                            </button>
-                            <div id="reflsub-new-parent-wrap" class="reflsub-new-parent-wrap" hidden>
-                                <input type="text" id="reflsub-new-parent-name" placeholder="e.g. Weekly Prompts" autocomplete="off">
-                                <button type="button" id="reflsub-new-parent-create" class="reflsub-new-parent-create">Create</button>
-                                <span id="reflsub-new-parent-msg" class="reflsub-new-parent-msg"></span>
+                            <div class="reflsub-field">
+                                <label for="reflsub-page-title">Page Title</label>
+                                <input type="text" id="reflsub-page-title" name="reflsub_page_title"
+                                       value="<?php echo esc_attr( $page_title ); ?>"
+                                       placeholder="e.g. Week 3 Reflection">
                             </div>
-                        </div>
-                        <div class="reflsub-field reflsub-field-check">
-                            <label>Resubmission</label>
-                            <label class="reflsub-toggle">
-                                <input type="checkbox" name="reflsub_allow_resub" value="1"
-                                       <?php checked( $allow_resub, 1 ); ?>>
-                                <span>Allow students to submit more than once</span>
-                            </label>
-                        </div>
-                    </div>
 
-                    <div class="reflsub-field">
-                        <label for="reflsub-auto-tags">
-                            Auto-tags <span class="reflsub-optional">optional</span>
-                        </label>
-                        <input type="text" id="reflsub-auto-tags" name="reflsub_auto_tags"
-                               placeholder="e.g. week-3, photography, critical-thinking"
-                               value="<?php echo esc_attr( $auto_tags_val ); ?>">
-                        <span class="reflsub-field-desc">Comma-separated. These tags are silently applied to every submission from this page — students don't see them.</span>
-                    </div>
+                            <div class="reflsub-field">
+                                <label for="reflsub-intro-text">
+                                    Intro Text <span class="reflsub-optional">optional</span>
+                                </label>
+                                <textarea id="reflsub-intro-text" name="reflsub_intro_text" rows="5"
+                                          placeholder="Optional description shown above the student form…"><?php echo esc_textarea( $intro_text ); ?></textarea>
+                                <span class="reflsub-field-desc">Displayed above the form on the page.</span>
+                            </div>
 
+                            <div class="reflsub-field">
+                                <label for="reflsub-parent">
+                                    Parent Page <span class="reflsub-optional">optional</span>
+                                </label>
+                                <select id="reflsub-parent" name="reflsub_parent_id">
+                                    <option value="0">— Standalone —</option>
+                                    <?php foreach ( $all_pages as $p ) : ?>
+                                    <option value="<?php echo esc_attr( $p->ID ); ?>" <?php selected( $parent_id, $p->ID ); ?>>
+                                        <?php echo esc_html( $p->post_title ?: '(no title) #' . $p->ID ); ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <span class="reflsub-field-desc">
+                                    Nest under a parent page so it auto-appears in the sidebar menu and groups with related pages in the Progress view.
+                                </span>
+                                <button type="button" id="reflsub-new-parent-toggle" class="reflsub-new-parent-toggle"
+                                        data-nonce="<?php echo esc_attr( wp_create_nonce( 'reflsub_create_parent_page' ) ); ?>">
+                                    + New parent page
+                                </button>
+                                <div id="reflsub-new-parent-wrap" class="reflsub-new-parent-wrap" hidden>
+                                    <input type="text" id="reflsub-new-parent-name" placeholder="e.g. Weekly Prompts" autocomplete="off">
+                                    <button type="button" id="reflsub-new-parent-create" class="reflsub-new-parent-create">Create</button>
+                                    <span id="reflsub-new-parent-msg" class="reflsub-new-parent-msg"></span>
+                                </div>
+                            </div>
+
+                            <div class="reflsub-field">
+                                <label for="reflsub-auto-tags">
+                                    Auto-tags <span class="reflsub-optional">optional</span>
+                                </label>
+                                <input type="text" id="reflsub-auto-tags" name="reflsub_auto_tags"
+                                       placeholder="e.g. week-3, photography, critical-thinking"
+                                       value="<?php echo esc_attr( $auto_tags_val ); ?>">
+                                <span class="reflsub-field-desc">Comma-separated. These tags are silently applied to every submission from this page — students don't see them.</span>
+                            </div>
+
+                        </div><!-- /.reflsub-col-main -->
+
+                        <!-- ── Sidebar column ── -->
+                        <div class="reflsub-col-sidebar">
+
+                            <div class="reflsub-field">
+                                <label for="reflsub-page-status">Page Status</label>
+                                <select id="reflsub-page-status" name="reflsub_page_status">
+                                    <option value="publish" <?php selected( $page_status, 'publish' ); ?>>Published</option>
+                                    <option value="draft"   <?php selected( $page_status, 'draft' ); ?>>Draft</option>
+                                    <option value="private" <?php selected( $page_status, 'private' ); ?>>Private</option>
+                                </select>
+                                <span class="reflsub-field-desc">Controls whether students can access the page.</span>
+                            </div>
+
+                            <div class="reflsub-field">
+                                <label for="reflsub-privacy">Submission Privacy</label>
+                                <select id="reflsub-privacy" name="reflsub_privacy">
+                                    <option value="publish" <?php selected( $privacy, 'publish' ); ?>>Publish — visible to all</option>
+                                    <option value="private" <?php selected( $privacy, 'private' ); ?>>Private — student only</option>
+                                    <option value="pending" <?php selected( $privacy, 'pending' ); ?>>Pending Review</option>
+                                </select>
+                                <span class="reflsub-field-desc">Status applied to each submission.</span>
+                            </div>
+
+                            <div class="reflsub-field reflsub-field-check">
+                                <label>Resubmission</label>
+                                <label class="reflsub-toggle">
+                                    <input type="checkbox" name="reflsub_allow_resub" value="1"
+                                           <?php checked( $allow_resub, 1 ); ?>>
+                                    <span>Allow students to submit more than once</span>
+                                </label>
+                            </div>
+
+                        </div><!-- /.reflsub-col-sidebar -->
+
+                    </div><!-- /.reflsub-builder-columns -->
                 </div>
             </div>
 
@@ -446,9 +456,25 @@ function reflsub_render_page_builder() {
 
         /* ── App shell ─────────────────────────────────────────────── */
         .reflsub-app {
-            max-width: 820px;
+            max-width: 1100px;
             margin: 0 auto;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        /* ── Two-column builder layout ─────────────────────────────── */
+        .reflsub-builder-columns {
+            display: grid;
+            grid-template-columns: 1fr 260px;
+            gap: 32px;
+            align-items: start;
+        }
+        .reflsub-col-sidebar {
+            border-left: 1px solid var(--rs-g200);
+            padding-left: 32px;
+        }
+        .reflsub-col-sidebar .reflsub-field input[type="text"],
+        .reflsub-col-sidebar .reflsub-field select {
+            max-width: 100%;
         }
 
         /* ── Page header ───────────────────────────────────────────── */
@@ -624,7 +650,7 @@ function reflsub_render_page_builder() {
         .reflsub-section-body textarea,
         .reflsub-section-body input[type="text"],
         .reflsub-section-body input[type="number"] {
-            width: 100%; max-width: 600px; margin-bottom: 10px;
+            width: 100%; max-width: 100%; margin-bottom: 10px;
             padding: 10px 12px; border: 1.5px solid var(--rs-g200);
             border-radius: var(--rs-r-sm); font-size: 15px; font-family: inherit;
             background: var(--rs-g50); box-sizing: border-box;
@@ -659,8 +685,8 @@ function reflsub_render_page_builder() {
         .reflsub-add-btn {
             border: 1.5px solid var(--rs-accent-border) !important;
             color: var(--rs-accent-dark) !important; background: #fff !important;
-            border-radius: var(--rs-pill) !important; padding: 9px 20px !important;
-            font-size: 15px !important; font-weight: 600 !important;
+            border-radius: 6px !important; padding: 10px 16px !important;
+            font-size: 14px !important; font-weight: 600 !important;
             line-height: 1.5 !important; height: auto !important; box-shadow: none !important;
             cursor: pointer;
             transition: background var(--rs-t), color var(--rs-t), border-color var(--rs-t) !important;
