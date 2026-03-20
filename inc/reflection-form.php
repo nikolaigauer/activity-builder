@@ -738,7 +738,7 @@ function reflsub_reflection_form_shortcode( $atts ) {
         </div>
         <?php endif; ?>
 
-        <form class="reflection-form" method="post"<?php echo $form_enctype; ?>>
+        <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>">
 
             <?php wp_nonce_field( 'submit_reflection', 'reflection_nonce' ); ?>
             <input type="hidden" name="reflection_page_id" value="<?php echo esc_attr( $page_id ); ?>">
@@ -856,6 +856,78 @@ function reflsub_reflection_form_shortcode( $atts ) {
         .reflection-info      { background: #f0f6fc; border-left: 4px solid #2271b1; }
         .reflection-duplicate { background: #fff8e5; border-left: 4px solid #dba617; }
     </style>
+
+    <script>
+    (function() {
+        var form     = document.querySelector('.reflection-form[data-page-id]');
+        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId : null;
+        if ( draftKey ) {
+            if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
+                localStorage.removeItem( draftKey );
+            } else {
+                var saved = null;
+                try { saved = JSON.parse( localStorage.getItem( draftKey ) ); } catch(e) {}
+                if ( saved && Object.keys(saved).length ) {
+                    var anyRestored = false;
+                    Object.keys(saved).forEach(function(name) {
+                        var el = form.querySelector('[name="' + name + '"]');
+                        if ( el && ( el.tagName === 'TEXTAREA' || ( el.tagName === 'INPUT' && el.type === 'text' ) ) ) {
+                            el.value = saved[name]; anyRestored = true;
+                        }
+                    });
+                    if ( anyRestored ) {
+                        var notice = document.createElement('div');
+                        notice.className = 'reflection-notice reflection-info';
+                        notice.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1.5rem;';
+                        notice.innerHTML = '<p style="margin:0;"><strong>Draft restored.</strong> Your previous text was saved automatically.</p>'
+                            + '<button type="button" style="background:none;border:none;color:#2271b1;cursor:pointer;white-space:nowrap;padding:0;font-size:0.9rem;text-decoration:underline;">Discard &amp; start fresh</button>';
+                        form.parentNode.insertBefore( notice, form );
+                        notice.querySelector('button').addEventListener('click', function() {
+                            localStorage.removeItem( draftKey ); notice.remove();
+                            form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) { el.value = ''; });
+                        });
+                    }
+                }
+                var saveTimer;
+                form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
+                    el.addEventListener('input', function() {
+                        clearTimeout(saveTimer);
+                        saveTimer = setTimeout(function() {
+                            var data = {};
+                            form.querySelectorAll('textarea, input[type="text"]').forEach(function(f) {
+                                if (f.name) data[f.name] = f.value;
+                            });
+                            try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
+                        }, 2000);
+                    });
+                });
+            }
+        }
+        var POST_MAX_BYTES = <?php echo (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ); ?>;
+        if ( form ) {
+            form.addEventListener('submit', function(e) {
+                var total = 0;
+                form.querySelectorAll('input[type="file"]').forEach(function(input) {
+                    Array.from(input.files || []).forEach(function(f) { total += f.size; });
+                });
+                if ( total > POST_MAX_BYTES * 0.9 ) {
+                    e.preventDefault();
+                    var errEl = document.getElementById('reflsub-upload-error');
+                    if ( !errEl ) {
+                        errEl = document.createElement('div'); errEl.id = 'reflsub-upload-error';
+                        errEl.className = 'reflection-notice reflection-error';
+                        form.querySelector('.reflection-submit').insertAdjacentElement('beforebegin', errEl);
+                    }
+                    errEl.innerHTML = '<p><strong>Images too large to upload.</strong> Your selected images total '
+                        + (total/1024/1024).toFixed(1) + ' MB — the limit is '
+                        + (POST_MAX_BYTES/1024/1024).toFixed(0) + ' MB. Remove some images and try again. '
+                        + '<em>Your text has not been lost.</em></p>';
+                    errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+        }
+    })();
+    </script>
     <?php
 
     return ob_get_clean();
@@ -1010,7 +1082,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         </div>
         <?php endif; ?>
 
-        <form class="reflection-form" method="post"<?php echo $form_enctype; ?>>
+        <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>">
 
             <?php wp_nonce_field( 'submit_reflection', 'reflection_nonce' ); ?>
             <input type="hidden" name="reflection_page_id" value="<?php echo esc_attr( $page_id ); ?>">
@@ -1237,13 +1309,28 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         .reflsub-drop-previews {
             display: flex; flex-wrap: wrap; gap: 8px;
             margin-top: 1rem; justify-content: center;
-            pointer-events: none;
         }
-        .reflsub-drop-previews img {
+        .reflsub-preview-wrap {
+            position: relative; display: inline-block;
+            line-height: 0;
+        }
+        .reflsub-preview-wrap img {
             width: 80px; height: 80px; object-fit: cover;
             border-radius: 6px; border: 2px solid #fde68a;
             box-shadow: 0 1px 3px rgba(0,0,0,.1);
+            display: block;
         }
+        .reflsub-preview-remove {
+            position: absolute; top: -7px; right: -7px;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #d63638; color: #fff;
+            border: 2px solid #fff; font-size: 13px; line-height: 1;
+            cursor: pointer; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity .15s;
+            box-shadow: 0 1px 3px rgba(0,0,0,.35);
+        }
+        .reflsub-preview-wrap:hover .reflsub-preview-remove { opacity: 1; }
         .reflsub-drop-count {
             font-size: 0.8rem; color: #00a32a; font-weight: 600; margin-top: 0.5rem;
         }
@@ -1279,61 +1366,183 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             update();
         });
 
+        // ── LocalStorage autosave ─────────────────────────────────────────────
+        var form     = document.querySelector('.reflection-form[data-page-id]');
+        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId : null;
+
+        if ( draftKey ) {
+            if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
+                // Successful submit — wipe the draft
+                localStorage.removeItem( draftKey );
+            } else {
+                // Restore draft if one exists
+                var saved = null;
+                try { saved = JSON.parse( localStorage.getItem( draftKey ) ); } catch(e) {}
+                if ( saved && Object.keys(saved).length ) {
+                    var anyRestored = false;
+                    Object.keys(saved).forEach(function(name) {
+                        var el = form.querySelector('[name="' + name + '"]');
+                        if ( el && ( el.tagName === 'TEXTAREA' || ( el.tagName === 'INPUT' && el.type === 'text' ) ) ) {
+                            el.value = saved[name];
+                            anyRestored = true;
+                        }
+                    });
+                    if ( anyRestored ) {
+                        var notice = document.createElement('div');
+                        notice.className = 'reflection-notice reflection-info';
+                        notice.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1.5rem;';
+                        notice.innerHTML = '<p style="margin:0;"><strong>Draft restored.</strong> Your previous text was saved automatically and has been filled in.</p>'
+                            + '<button type="button" style="background:none;border:none;color:#2271b1;cursor:pointer;white-space:nowrap;padding:0;font-size:0.9rem;flex-shrink:0;text-decoration:underline;">Discard &amp; start fresh</button>';
+                        form.parentNode.insertBefore( notice, form );
+                        notice.querySelector('button').addEventListener('click', function() {
+                            localStorage.removeItem( draftKey );
+                            notice.remove();
+                            form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) { el.value = ''; });
+                        });
+                    }
+                }
+
+                // Save on input, debounced 2 s
+                var saveTimer;
+                function reflsubSaveDraft() {
+                    var data = {};
+                    form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
+                        if ( el.name ) data[el.name] = el.value;
+                    });
+                    try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
+                }
+                form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
+                    el.addEventListener('input', function() {
+                        clearTimeout(saveTimer);
+                        saveTimer = setTimeout( reflsubSaveDraft, 2000 );
+                    });
+                });
+            }
+        }
+
+        // ── Total upload size guard ────────────────────────────────────────────
+        // Catches oversized POSTs client-side so the text fields are never wiped.
+        var POST_MAX_BYTES = <?php echo (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ); ?>;
+        if ( form ) {
+            form.addEventListener('submit', function(e) {
+                var total = 0;
+                form.querySelectorAll('input[type="file"]').forEach(function(input) {
+                    Array.from(input.files || []).forEach(function(f) { total += f.size; });
+                });
+                // Use 90 % of post_max_size to leave room for text fields in the request body
+                if ( total > POST_MAX_BYTES * 0.9 ) {
+                    e.preventDefault();
+                    var errEl = document.getElementById('reflsub-upload-error');
+                    if ( !errEl ) {
+                        errEl = document.createElement('div');
+                        errEl.id = 'reflsub-upload-error';
+                        errEl.className = 'reflection-notice reflection-error';
+                        form.querySelector('.reflection-submit').insertAdjacentElement('beforebegin', errEl);
+                    }
+                    var mb    = ( total / 1024 / 1024 ).toFixed(1);
+                    var limit = ( POST_MAX_BYTES / 1024 / 1024 ).toFixed(0);
+                    errEl.innerHTML = '<p><strong>Images too large to upload.</strong> Your selected images total '
+                        + mb + ' MB — the upload limit is ' + limit + ' MB. '
+                        + 'Please remove some images and try again. '
+                        + '<em>Your written text has not been lost.</em></p>';
+                    errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+        }
+
         // ── Drag-and-drop image zones ──────────────────────────────────────────
         document.querySelectorAll('.reflsub-drop-zone').forEach(function(zone) {
-            var input    = zone.querySelector('.reflsub-drop-input');
-            var previews = zone.querySelector('.reflsub-drop-previews');
+            var input         = zone.querySelector('.reflsub-drop-input');
+            var previews      = zone.querySelector('.reflsub-drop-previews');
+            var acceptedFiles = []; // accumulates files across multiple drops/selects
 
-            function validateAndRender(files) {
-                var valid = [];
-                var rejected = [];
-                Array.from(files).forEach(function(f) {
-                    if (f.size > MAX_FILE_BYTES) {
-                        rejected.push(f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)');
-                    } else {
-                        valid.push(f);
-                    }
-                });
-                if (rejected.length) {
-                    alert('The following file(s) exceed the 15 MB limit and were not added:\n\n' + rejected.join('\n'));
-                }
-                if (!valid.length) return;
-
-                // Replace input files via DataTransfer
+            function rebuildInput() {
                 var dt = new DataTransfer();
-                valid.forEach(function(f) { dt.items.add(f); });
+                acceptedFiles.forEach(function(f) { dt.items.add(f); });
                 input.files = dt.files;
+            }
 
-                // Render previews
-                previews.innerHTML = '';
-                zone.classList.add('has-files');
-                zone.classList.remove('is-over');
-
-                valid.forEach(function(f) {
-                    var reader = new FileReader();
-                    reader.onload = function(e) {
-                        var img = document.createElement('img');
-                        img.src = e.target.result;
-                        img.alt = f.name;
-                        previews.appendChild(img);
-                    };
-                    reader.readAsDataURL(f);
-                });
-
-                // Count label
+            function updateCount() {
                 var countEl = zone.querySelector('.reflsub-drop-count');
                 if (!countEl) {
                     countEl = document.createElement('p');
                     countEl.className = 'reflsub-drop-count';
                     zone.appendChild(countEl);
                 }
-                countEl.textContent = valid.length + ' image' + (valid.length > 1 ? 's' : '') + ' ready to upload';
+                if (acceptedFiles.length) {
+                    countEl.textContent = acceptedFiles.length + ' image' + (acceptedFiles.length > 1 ? 's' : '') + ' ready to upload';
+                    zone.classList.add('has-files');
+                } else {
+                    countEl.textContent = '';
+                    zone.classList.remove('has-files');
+                }
+            }
+
+            function addPreview(file, idx) {
+                var wrap = document.createElement('div');
+                wrap.className = 'reflsub-preview-wrap';
+                wrap.dataset.idx = idx;
+
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.alt = file.name;
+                    wrap.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'reflsub-preview-remove';
+                btn.setAttribute('aria-label', 'Remove ' + file.name);
+                btn.innerHTML = '&times;';
+                btn.addEventListener('click', function() {
+                    var i = parseInt(wrap.dataset.idx, 10);
+                    acceptedFiles.splice(i, 1);
+                    wrap.remove();
+                    // Re-index remaining wraps
+                    previews.querySelectorAll('.reflsub-preview-wrap').forEach(function(w, newIdx) {
+                        w.dataset.idx = newIdx;
+                    });
+                    rebuildInput();
+                    updateCount();
+                });
+                wrap.appendChild(btn);
+                previews.appendChild(wrap);
+            }
+
+            function addFiles(files) {
+                var rejected = [];
+                Array.from(files).forEach(function(f) {
+                    if (f.size > MAX_FILE_BYTES) {
+                        rejected.push(f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)');
+                        return;
+                    }
+                    // Deduplicate by name + size
+                    var dupe = acceptedFiles.some(function(a) {
+                        return a.name === f.name && a.size === f.size;
+                    });
+                    if (dupe) return;
+
+                    var idx = acceptedFiles.length;
+                    acceptedFiles.push(f);
+                    addPreview(f, idx);
+                });
+                if (rejected.length) {
+                    alert('The following file(s) exceed the 15 MB limit and were not added:\n\n' + rejected.join('\n'));
+                }
+                zone.classList.remove('is-over');
+                rebuildInput();
+                updateCount();
             }
 
             // File input change
             input.addEventListener('change', function() {
                 if (input.files.length) {
-                    validateAndRender(input.files);
+                    addFiles(input.files);
+                    // Reset the input so the same file can be re-added after removal
+                    input.value = '';
                 }
             });
 
@@ -1350,9 +1559,8 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             zone.addEventListener('drop', function(e) {
                 e.preventDefault();
                 zone.classList.remove('is-over');
-                var files = e.dataTransfer.files;
-                if (files.length) {
-                    validateAndRender(files);
+                if (e.dataTransfer.files.length) {
+                    addFiles(e.dataTransfer.files);
                 }
             });
         });
