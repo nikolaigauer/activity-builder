@@ -526,15 +526,32 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     if ( $video_meta ) update_post_meta( $post_id, '_reflection_video_url', $video_meta );
     if ( $embed_meta ) update_post_meta( $post_id, '_reflection_embed', $embed_meta );
 
-    // Image upload — resolve placeholder at the correct section position
+    // Image upload — resolve placeholder at the correct section position.
+    // In edit mode, kept_ids are the existing images the student chose to keep
+    // (hidden inputs reflsub_keep_image_ids[]); new uploads are appended after.
     if ( $image_sec_idx >= 0 ) {
+        $kept_ids = array();
+        if ( $edit_post_id && ! empty( $_POST['reflsub_keep_image_ids'] ) ) {
+            foreach ( (array) $_POST['reflsub_keep_image_ids'] as $kid ) {
+                $kid = intval( $kid );
+                $att = get_post( $kid );
+                // Only allow attachments that belong to this post (prevents spoofing).
+                if ( $att && $att->post_type === 'attachment' && (int) $att->post_parent === $post_id ) {
+                    $kept_ids[] = $kid;
+                }
+            }
+        }
+
         $uploaded_ids = reflsub_upload_multiple_images( 'section_image', $post_id );
-        if ( ! empty( $uploaded_ids ) ) {
-            $image_block = reflsub_build_image_block( $uploaded_ids );
+        $final_ids    = array_merge( $kept_ids, $uploaded_ids );
+
+        if ( ! empty( $final_ids ) ) {
+            $image_block = reflsub_build_image_block( $final_ids );
             if ( $image_block ) {
                 $ordered_parts[ $image_sec_idx ] = $image_block;
             }
         }
+        // If $final_ids is empty the placeholder null is stripped by array_filter below — intentional.
     }
 
     // PDF upload — resolve placeholder at the correct section position
@@ -1160,9 +1177,41 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <?php endif; ?>
             </div>
 
-            <?php elseif ( $type === 'image' ) : ?>
+            <?php elseif ( $type === 'image' ) :
+                $existing_img_ids = $edit_post_id ? get_posts( array(
+                    'post_type'      => 'attachment',
+                    'post_parent'    => $edit_post_id,
+                    'post_mime_type' => 'image',
+                    'posts_per_page' => -1,
+                    'post_status'    => 'inherit',
+                    'orderby'        => 'date',
+                    'order'          => 'ASC',
+                    'fields'         => 'ids',
+                ) ) : array();
+            ?>
             <div class="reflection-field">
                 <label>Upload Image(s)</label>
+                <?php if ( ! empty( $existing_img_ids ) ) : ?>
+                <div class="reflsub-existing-images" id="reflsub-existing-<?php echo $i; ?>">
+                    <p class="reflsub-existing-label">Currently uploaded — click &times; to remove:</p>
+                    <div class="reflsub-existing-thumbs">
+                        <?php foreach ( $existing_img_ids as $img_id ) :
+                            $thumb = wp_get_attachment_image_url( $img_id, 'thumbnail' );
+                            $alt   = get_the_title( $img_id );
+                            if ( ! $thumb ) continue;
+                        ?>
+                        <div class="reflsub-existing-wrap" data-img-id="<?php echo esc_attr( $img_id ); ?>">
+                            <img src="<?php echo esc_url( $thumb ); ?>" alt="<?php echo esc_attr( $alt ); ?>">
+                            <button type="button" class="reflsub-existing-remove" aria-label="Remove <?php echo esc_attr( $alt ); ?>">&times;</button>
+                            <input type="hidden"
+                                   name="reflsub_keep_image_ids[]"
+                                   value="<?php echo esc_attr( $img_id ); ?>"
+                                   id="reflsub-keep-<?php echo esc_attr( $img_id ); ?>">
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
                 <div class="reflsub-drop-zone" id="reflsub-drop-zone-<?php echo $i; ?>">
                     <div class="reflsub-drop-inner">
                         <span class="reflsub-drop-icon" aria-hidden="true">🖼️</span>
@@ -1178,7 +1227,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                            aria-label="Upload images">
                     <div class="reflsub-drop-previews" id="reflsub-previews-<?php echo $i; ?>"></div>
                 </div>
-                <p class="reflection-hint">JPEG, PNG, GIF, WebP · Max 15 MB per file · Multiple images will display as a gallery.</p>
+                <p class="reflection-hint">JPEG, PNG, GIF, WebP · Max 15 MB per file · Multiple images display as a gallery.<?php if ( ! empty( $existing_img_ids ) ) : ?> New uploads are added alongside any kept images.<?php endif; ?></p>
             </div>
 
             <?php elseif ( $type === 'video' ) : ?>
@@ -1274,6 +1323,41 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         .reflection-hint { margin: 0.3rem 0 0; font-size: 0.85rem; color: #646970; }
 
         /* ── Drop zone ─────────────────────────────────────────────── */
+        .reflsub-existing-images {
+            margin-bottom: 0.75rem;
+            padding: 0.6rem 0.75rem;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+        }
+        .reflsub-existing-label {
+            margin: 0 0 0.5rem;
+            font-size: 0.85rem;
+            color: #166534;
+        }
+        .reflsub-existing-thumbs {
+            display: flex; flex-wrap: wrap; gap: 8px;
+        }
+        .reflsub-existing-wrap {
+            position: relative; display: inline-block; line-height: 0;
+        }
+        .reflsub-existing-wrap img {
+            width: 80px; height: 80px; object-fit: cover;
+            border-radius: 6px; border: 2px solid #86efac;
+            box-shadow: 0 1px 3px rgba(0,0,0,.1);
+            display: block;
+        }
+        .reflsub-existing-remove {
+            position: absolute; top: -7px; right: -7px;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #d63638; color: #fff;
+            border: 2px solid #fff; font-size: 13px; line-height: 1;
+            cursor: pointer; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity .15s;
+            box-shadow: 0 1px 3px rgba(0,0,0,.35);
+        }
+        .reflsub-existing-wrap:hover .reflsub-existing-remove { opacity: 1; }
         .reflsub-drop-zone {
             position: relative;
             border: 2px dashed #c3c4c7;
@@ -1541,8 +1625,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             input.addEventListener('change', function() {
                 if (input.files.length) {
                     addFiles(input.files);
-                    // Reset the input so the same file can be re-added after removal
+                    // Reset so the same file can be re-added after removal,
+                    // then immediately restore the accumulated files so they
+                    // are present when the form is submitted.
                     input.value = '';
+                    rebuildInput();
                 }
             });
 
@@ -1564,6 +1651,23 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 }
             });
         });
+
+        // ── Existing-image removal (edit mode) ────────────────────────────────
+        document.querySelectorAll('.reflsub-existing-wrap').forEach(function(wrap) {
+            var container = wrap.closest('.reflsub-existing-images');
+            var btn = wrap.querySelector('.reflsub-existing-remove');
+            if (!btn) return;
+            btn.addEventListener('click', function() {
+                var hidden = document.getElementById('reflsub-keep-' + wrap.dataset.imgId);
+                if (hidden) hidden.remove();
+                wrap.remove();
+                // Hide the whole section if all existing images were removed
+                if (container && !container.querySelector('.reflsub-existing-wrap')) {
+                    container.style.display = 'none';
+                }
+            });
+        });
+
     })();
     </script>
     <?php
