@@ -310,7 +310,7 @@ function reflsub_render_page_builder() {
                                 <label for="reflsub-intro-text">
                                     Intro Text <span class="reflsub-optional">optional</span>
                                 </label>
-                                <textarea id="reflsub-intro-text" name="reflsub_intro_text" rows="5"
+                                <textarea id="reflsub-intro-text" name="reflsub_intro_text" rows="6"
                                           placeholder="Optional description shown above the student form…"><?php echo esc_textarea( $intro_text ); ?></textarea>
                                 <span class="reflsub-field-desc">Displayed above the form on the page.</span>
                             </div>
@@ -566,6 +566,9 @@ function reflsub_render_page_builder() {
         }
         .reflsub-field textarea { resize: vertical; }
         .reflsub-field-desc { display: block; margin-top: 5px; font-size: 12px; color: var(--rs-g500); }
+
+        /* Intro text fills the left column */
+        #reflsub-intro-text { max-width: 100%; }
 
         /* Quick-create parent page */
         .reflsub-new-parent-toggle {
