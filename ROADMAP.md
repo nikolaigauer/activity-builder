@@ -80,11 +80,32 @@ Do this before a public/ETUG release so the plugin has zero required dependencie
 
 ---
 
-## ePortfolio Theme Cleanup
+## Dashboard Menu: Theme + Plugin Handshake
 
-The theme (`eportfolio-theme-2`) contains an earlier version of the reflection prompt
-feature built directly into the theme before the plugin extraction decision. Needs:
-- Audit of overlapping functionality
-- Remove or deprecate theme-side ACF field group registration once plugin is standalone
-- Ensure advanced privacy controls and `/author/` layout remain intact and independent
-  of the plugin's features
+When both the ePortfolio theme and the reflection-submissions plugin are active,
+the combined admin sidebar should feel like a single coherent product — not two
+separate tools bolted together. When only one is active, each should still present
+a logical, self-contained menu.
+
+Things to think through:
+- The plugin currently adds top-level "Reflections" and "New Post" menus. The theme
+  adds its own student dashboard items. Together these may produce a cluttered or
+  confusing sidebar, especially for students.
+- Consider a shared top-level menu (e.g. "ePortfolio") that both the theme and plugin
+  contribute submenus to when they co-exist — plugin detection on both sides to decide
+  whether to register as top-level or as a submenu of the shared parent.
+- For students (non-admins) the sidebar should be minimal: just "New Post" and maybe
+  "My Submissions". Everything else hidden.
+- Graceful degradation: plugin active without theme → plugin menus stand alone cleanly.
+  Theme active without plugin → theme menus stand alone cleanly.
+
+---
+
+## ePortfolio Theme Cleanup ✓
+
+Completed. The theme (`eportfolio-theme-2`) has been cleaned up:
+- `inc/acf-fields.php`, `inc/reflection-form.php`, `inc/post-form.php` stubbed out
+- All three removed from the module loader in `functions.php`
+- Plugin is now the sole owner of reflection forms, post form, and field config
+- Theme retains: content-type taxonomy (with plugin-detection guard), privacy logic,
+  portfolio curation, rewrite rules, display/navigation hooks
