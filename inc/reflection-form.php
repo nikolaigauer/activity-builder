@@ -779,7 +779,7 @@ function reflsub_reflection_form_shortcode( $atts ) {
         </div>
         <?php endif; ?>
 
-        <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>">
+        <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>" data-user-id="<?php echo esc_attr( $user_id ); ?>">
 
             <?php wp_nonce_field( 'submit_reflection', 'reflection_nonce' ); ?>
             <input type="hidden" name="reflection_page_id" value="<?php echo esc_attr( $page_id ); ?>">
@@ -901,7 +901,11 @@ function reflsub_reflection_form_shortcode( $atts ) {
     <script>
     (function() {
         var form     = document.querySelector('.reflection-form[data-page-id]');
-        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId : null;
+        // Key is scoped to both page and logged-in user — prevents draft leaking
+        // between users on shared machines / lab computers.
+        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId + '_' + form.dataset.userId : null;
+        // Clean up any legacy un-scoped key left by earlier builds.
+        if ( form ) { try { localStorage.removeItem( 'reflsub_draft_' + form.dataset.pageId ); } catch(e) {} }
         if ( draftKey ) {
             if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
                 localStorage.removeItem( draftKey );
@@ -1134,7 +1138,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         </div>
         <?php endif; ?>
 
-        <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>">
+        <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>" data-user-id="<?php echo esc_attr( $user_id ); ?>">
 
             <?php wp_nonce_field( 'submit_reflection', 'reflection_nonce' ); ?>
             <input type="hidden" name="reflection_page_id" value="<?php echo esc_attr( $page_id ); ?>">
@@ -1617,7 +1621,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
         // ── LocalStorage autosave ─────────────────────────────────────────────
         var form     = document.querySelector('.reflection-form[data-page-id]');
-        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId : null;
+        // Key is scoped to both page and logged-in user — prevents draft leaking
+        // between users on shared machines / lab computers.
+        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId + '_' + form.dataset.userId : null;
+        // Clean up any legacy un-scoped key left by earlier builds.
+        if ( form ) { try { localStorage.removeItem( 'reflsub_draft_' + form.dataset.pageId ); } catch(e) {} }
 
         if ( draftKey ) {
             if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
