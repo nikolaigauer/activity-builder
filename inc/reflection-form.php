@@ -38,6 +38,9 @@ function reflsub_sanitize_embed_code( $raw ) {
             'class'           => array(),
             'id'              => array(),
             'name'            => array(),
+            'referrerpolicy'  => array(), // present in YouTube embed codes since ~2023
+            'loading'         => array(), // lazy-loading support
+            'sandbox'         => array(), // some platforms (Kaltura etc.) use this
         ),
     );
     return wp_kses( trim( $raw ), $allowed );
