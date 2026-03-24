@@ -1276,6 +1276,80 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <p class="reflection-hint">Add tags to help categorize your post.</p>
             </div>
 
+            <?php elseif ( $type === 're_reflect' ) :
+                $rr_heading   = $sec['heading']   ?? '';
+                $rr_date_from = $sec['date_from'] ?? '';
+                $rr_date_to   = $sec['date_to']   ?? '';
+                $rr_tags      = is_array( $sec['tags'] ?? null ) ? $sec['tags'] : array();
+                $rr_pick      = $sec['pick']       ?? 'random';
+
+                // Build query args scoped to this student's submissions
+                $rr_args = array(
+                    'post_type'      => 'post',
+                    'author'         => $user_id,
+                    'post_status'    => array( 'publish', 'private' ),
+                    'posts_per_page' => $rr_pick === 'random' ? 20 : 1,
+                    'orderby'        => $rr_pick === 'oldest' ? 'date' : 'date',
+                    'order'          => $rr_pick === 'oldest' ? 'ASC' : 'DESC',
+                    'meta_query'     => array(
+                        array(
+                            'key'     => '_reflection_source_page',
+                            'compare' => 'EXISTS',
+                        ),
+                    ),
+                );
+
+                // Date range filter
+                $rr_date_query = array();
+                if ( $rr_date_from ) {
+                    $rr_date_query['after'] = $rr_date_from;
+                }
+                if ( $rr_date_to ) {
+                    $rr_date_query['before'] = $rr_date_to;
+                }
+                if ( $rr_date_query ) {
+                    $rr_date_query['inclusive'] = true;
+                    $rr_args['date_query']      = array( $rr_date_query );
+                }
+
+                // Tag filter
+                if ( ! empty( $rr_tags ) ) {
+                    $rr_args['tag_slug__in'] = $rr_tags;
+                }
+
+                $rr_posts = get_posts( $rr_args );
+
+                // Pick one from the result set
+                $rr_post = null;
+                if ( ! empty( $rr_posts ) ) {
+                    $rr_post = $rr_pick === 'random'
+                        ? $rr_posts[ array_rand( $rr_posts ) ]
+                        : $rr_posts[0];
+                }
+            ?>
+
+            <?php if ( $rr_post ) : ?>
+            <div class="reflection-field reflsub-rr-card">
+                <p class="reflsub-rr-card-heading">
+                    <?php echo esc_html( $rr_heading ?: 'Before you write, look back at this…' ); ?>
+                </p>
+                <blockquote class="reflsub-rr-card-excerpt">
+                    <?php
+                    // Strip prompt/question headings (<h3>, <h4>) so only the student's
+                    // own words appear in the excerpt.
+                    $rr_raw = get_the_content( null, false, $rr_post );
+                    $rr_raw = preg_replace( '/<h[34][^>]*>.*?<\/h[34]>/si', '', $rr_raw );
+                    echo esc_html( wp_trim_words( wp_strip_all_tags( $rr_raw ), 50, '…' ) );
+                    ?>
+                </blockquote>
+                <p class="reflsub-rr-card-meta">
+                    <?php echo esc_html( get_the_date( 'F j, Y', $rr_post ) ); ?>
+                    &nbsp;&mdash;&nbsp;
+                    <a href="<?php echo esc_url( get_permalink( $rr_post ) ); ?>" target="_blank" rel="noopener">View full post ↗</a>
+                </p>
+            </div>
+            <?php endif; // $rr_post ?>
+
             <?php endif; ?>
 
             <?php endforeach; ?>
@@ -1321,6 +1395,37 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
         .reflection-form input[type="file"] { display: block; margin-bottom: 0.4rem; }
         .reflection-hint { margin: 0.3rem 0 0; font-size: 0.85rem; color: #646970; }
+
+        /* ── Re-reflect card ────────────────────────────────────────── */
+        .reflsub-rr-card {
+            background: #f8f5ff;
+            border-left: 4px solid #7c5cbf;
+            border-radius: 6px;
+            padding: 1.1rem 1.25rem;
+        }
+        .reflsub-rr-card-heading {
+            margin: 0 0 0.6rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #7c5cbf;
+        }
+        .reflsub-rr-card blockquote.reflsub-rr-card-excerpt {
+            margin: 0 0 0.75rem;
+            padding: 0;
+            border: none;
+            font-style: italic;
+            font-size: 1rem;
+            line-height: 1.65;
+            color: #3c434a;
+        }
+        .reflsub-rr-card-meta {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #646970;
+        }
+        .reflsub-rr-card-meta a { color: #7c5cbf; }
 
         /* ── Drop zone ─────────────────────────────────────────────── */
         .reflsub-existing-images {

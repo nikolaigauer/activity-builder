@@ -405,6 +405,7 @@ function reflsub_render_page_builder() {
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('embed')">🔗 Embed</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('tags')">🏷️ Student Tags</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('pdf')">📄 PDF / File</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('re_reflect')">🔁 Re-reflect</button>
                     </div>
                 </div>
             </div>
@@ -754,7 +755,8 @@ function reflsub_render_page_builder() {
             video:  'Video URL',
             embed:  'Embed Code',
             tags:   'Student Tags',
-            pdf:    'PDF / File Upload'
+            pdf:        'PDF / File Upload',
+            re_reflect: 'Re-reflect on a Past Post'
         };
 
         // ── Drag-and-drop + up/down reordering ──────────────────────────────────
@@ -889,6 +891,28 @@ function reflsub_render_page_builder() {
                     '<div class="reflsub-section-meta"><label><input type="checkbox" class="reflsub-pdf-required"' + reqChecked + '> Required</label></div>';
             }
 
+            if (type === 're_reflect') {
+                var pickRandom  = (!data.pick || data.pick === 'random')  ? ' selected' : '';
+                var pickLatest  = (data.pick === 'latest')                ? ' selected' : '';
+                var pickOldest  = (data.pick === 'oldest')                ? ' selected' : '';
+                return '<label>Heading <span style="font-weight:normal;font-size:.9em;">(shown above the past post card)</span></label>' +
+                    '<input type="text" class="reflsub-rr-heading" placeholder="Before you write, look back at this…" value="' + esc(data.heading || '') + '" style="width:100%;">' +
+                    '<div class="reflsub-section-meta" style="margin-top:12px;gap:16px;">' +
+                    '<label style="display:flex;flex-direction:column;gap:4px;">Date from<input type="date" class="reflsub-rr-date-from" value="' + esc(data.date_from || '') + '"></label>' +
+                    '<label style="display:flex;flex-direction:column;gap:4px;">Date to<input type="date" class="reflsub-rr-date-to" value="' + esc(data.date_to || '') + '"></label>' +
+                    '</div>' +
+                    '<label style="display:block;margin-top:12px;">Tag filter <span style="font-weight:normal;font-size:.9em;">(comma-separated slugs — leave blank for any tag)</span></label>' +
+                    '<input type="text" class="reflsub-rr-tags" placeholder="e.g. media-ethics, critical-thinking" value="' + esc( (data.tags || []).join(', ') ) + '" style="width:100%;">' +
+                    '<div class="reflsub-section-meta" style="margin-top:12px;">' +
+                    '<label>Selection&nbsp;<select class="reflsub-rr-pick">' +
+                    '<option value="random"' + pickRandom + '>Random</option>' +
+                    '<option value="latest"' + pickLatest + '>Most recent</option>' +
+                    '<option value="oldest"' + pickOldest + '>Oldest</option>' +
+                    '</select></label>' +
+                    '</div>' +
+                    '<p class="reflsub-flag-note" style="margin-top:10px;">When the student opens this form, one of their past posts matching the filters above will appear as a read-only card. If no match is found the card is silently hidden.</p>';
+            }
+
             return '';
         }
 
@@ -934,9 +958,18 @@ function reflsub_render_page_builder() {
                     sec.required = el.querySelector('.reflsub-pdf-required').checked;
                 }
 
+                if (type === 're_reflect') {
+                    sec.heading   = el.querySelector('.reflsub-rr-heading').value.trim();
+                    sec.date_from = el.querySelector('.reflsub-rr-date-from').value;
+                    sec.date_to   = el.querySelector('.reflsub-rr-date-to').value;
+                    var rawTags   = el.querySelector('.reflsub-rr-tags').value;
+                    sec.tags      = rawTags.split(',').map(function(t){ return t.trim(); }).filter(Boolean);
+                    sec.pick      = el.querySelector('.reflsub-rr-pick').value;
+                }
+
                 sections.push(sec);
             });
-            document.getElementById('reflsub-sections-json').value = JSON.stringify(sections);
+            document.getElementById('reflsub-sections-json').value = jsonStringify(sections);
         }
 
         // Public API (called by inline onclick attributes)
@@ -963,6 +996,15 @@ function reflsub_render_page_builder() {
                 row.remove();
             }
         };
+
+        // JSON stringify that preserves non-ASCII characters as real UTF-8
+        // instead of \uXXXX escape sequences.  This prevents PHP's wp_unslash
+        // (stripslashes) from eating the leading backslash out of e.g. \u2014.
+        function jsonStringify(data) {
+            return JSON.stringify(data).replace(/\\u([0-9a-fA-F]{4})/g, function(_, hex) {
+                return String.fromCharCode(parseInt(hex, 16));
+            });
+        }
 
         // Serialise before form submit
         var form = document.getElementById('reflsub-builder-form');
@@ -1123,6 +1165,15 @@ function reflsub_save_reflection_page() {
                         break;
                     case 'pdf':
                         $clean['required'] = ! empty( $sec['required'] );
+                        break;
+                    case 're_reflect':
+                        $clean['heading']   = sanitize_text_field( $sec['heading'] ?? '' );
+                        $clean['date_from'] = sanitize_text_field( $sec['date_from'] ?? '' );
+                        $clean['date_to']   = sanitize_text_field( $sec['date_to'] ?? '' );
+                        $raw_tags           = is_array( $sec['tags'] ?? null ) ? $sec['tags'] : array();
+                        $clean['tags']      = array_values( array_filter( array_map( 'sanitize_key', $raw_tags ) ) );
+                        $allowed_pick       = array( 'random', 'latest', 'oldest' );
+                        $clean['pick']      = in_array( $sec['pick'] ?? '', $allowed_pick, true ) ? $sec['pick'] : 'random';
                         break;
                     default:
                         // Unknown type — skip
