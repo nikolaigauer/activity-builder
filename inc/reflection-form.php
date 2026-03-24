@@ -380,8 +380,9 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     $auto_tags     = $auto_tags_raw
         ? array_values( array_filter( array_map( 'sanitize_text_field', array_map( 'trim', explode( ',', $auto_tags_raw ) ) ) ) )
         : array();
-    $image_sec_idx  = -1; // section index of the image upload, or -1 if none
-    $pdf_sec_idx    = -1; // section index of the PDF upload, or -1 if none
+    $image_sec_idx      = -1;    // section index of the image upload, or -1 if none
+    $pdf_sec_idx        = -1;    // section index of the PDF section, or -1 if none
+    $pdf_upload_pending = false; // true only when a new PDF file was actually submitted
     $prompt_meta    = array(); // i => raw response text (stored as meta after post creation)
     $mcq_meta       = array(); // i => sanitized selected options array
     $video_meta     = '';
@@ -464,14 +465,35 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         }
 
         if ( $type === 'pdf' ) {
-            $pdf_name = $_FILES['section_pdf']['name'] ?? '';
+            $pdf_sec_idx = $i; // always record position, regardless of whether a file was submitted
+            $pdf_name    = $_FILES['section_pdf']['name'] ?? '';
             if ( $pdf_name !== '' && ( $_FILES['section_pdf']['error'] ?? UPLOAD_ERR_NO_FILE ) === UPLOAD_ERR_OK ) {
                 if ( ( $_FILES['section_pdf']['size'] ?? 0 ) <= 15 * 1024 * 1024 ) {
-                    $has_content = true;
-                    $pdf_sec_idx = $i;
+                    $has_content        = true;
+                    $pdf_upload_pending = true;
                     $ordered_parts[ $i ] = null; // placeholder — filled after post creation
                 }
             }
+        }
+    }
+
+    // Edit mode: if no new PDF was submitted but the student has an existing one,
+    // rebuild the block from the kept attachment so the post content preserves it.
+    if ( $edit_post_id && $pdf_sec_idx >= 0 && ! $pdf_upload_pending && ! empty( $_POST['reflsub_keep_pdf_id'] ) ) {
+        $keep_pdf_id = intval( $_POST['reflsub_keep_pdf_id'] );
+        $keep_att    = get_post( $keep_pdf_id );
+        if ( $keep_att && $keep_att->post_type === 'attachment' && (int) $keep_att->post_parent === $edit_post_id ) {
+            $keep_pdf_url   = wp_get_attachment_url( $keep_pdf_id );
+            $keep_pdf_title = get_the_title( $keep_pdf_id ) ?: basename( $keep_pdf_url );
+            $ordered_parts[ $pdf_sec_idx ] = sprintf(
+                '<!-- wp:file {"id":%d,"href":"%s"} --><div class="wp-block-file"><a href="%s">%s</a><a href="%s" class="wp-block-file__button" download>Download</a></div><!-- /wp:file -->',
+                $keep_pdf_id,
+                esc_url( $keep_pdf_url ),
+                esc_url( $keep_pdf_url ),
+                esc_html( $keep_pdf_title ),
+                esc_url( $keep_pdf_url )
+            );
+            $has_content = true; // kept PDF counts as valid submission content
         }
     }
 
@@ -554,8 +576,8 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         // If $final_ids is empty the placeholder null is stripped by array_filter below — intentional.
     }
 
-    // PDF upload — resolve placeholder at the correct section position
-    if ( $pdf_sec_idx >= 0 ) {
+    // PDF upload — resolve placeholder at the correct section position (new upload only)
+    if ( $pdf_upload_pending ) {
         require_once ABSPATH . 'wp-admin/includes/image.php';
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/media.php';
@@ -596,10 +618,9 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         }
     }
 
-    // Auto-tags from sections
-    if ( ! empty( $auto_tags ) ) {
-        wp_set_post_tags( $post_id, $auto_tags, true );
-    }
+    // Tags — always replace (not append) so edits can remove stale student tags.
+    // $auto_tags already contains page-level auto-tags + any student-submitted tags.
+    wp_set_post_tags( $post_id, $auto_tags );
 
     $redirect_arg = $edit_post_id ? 'reflection_updated' : 'reflection_submitted';
     wp_redirect( add_query_arg( $redirect_arg, '1', $redirect_base ) );
@@ -1075,6 +1096,17 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 $prefill[ $i ] = get_post_meta( $edit_post_id, '_reflection_video_url', true );
             } elseif ( $t === 'embed' ) {
                 $prefill[ $i ] = get_post_meta( $edit_post_id, '_reflection_embed', true );
+            } elseif ( $t === 'tags' ) {
+                // Show the student their own previously-submitted tags (page auto-tags excluded).
+                $all_tags      = wp_get_post_tags( $edit_post_id, array( 'fields' => 'names' ) );
+                $page_auto_raw = get_post_meta( $page_id, '_reflsub_auto_tags', true );
+                $page_auto_lc  = $page_auto_raw
+                    ? array_map( 'strtolower', array_map( 'trim', explode( ',', $page_auto_raw ) ) )
+                    : array();
+                $student_tags  = array_values( array_filter( $all_tags, function( $name ) use ( $page_auto_lc ) {
+                    return ! in_array( strtolower( $name ), $page_auto_lc, true );
+                } ) );
+                $prefill[ $i ] = implode( ', ', $student_tags );
             }
         }
     }
@@ -1250,17 +1282,41 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
             <?php elseif ( $type === 'pdf' ) :
                 $pdf_required = ! empty( $sec['required'] );
+                // In edit mode, look up the previously attached PDF.
+                $existing_pdf = null;
+                if ( $edit_post_id ) {
+                    $existing_pdfs = get_posts( array(
+                        'post_type'      => 'attachment',
+                        'post_parent'    => $edit_post_id,
+                        'post_mime_type' => 'application/pdf',
+                        'posts_per_page' => 1,
+                        'post_status'    => 'inherit',
+                        'orderby'        => 'date',
+                        'order'          => 'DESC',
+                    ) );
+                    $existing_pdf = ! empty( $existing_pdfs ) ? $existing_pdfs[0] : null;
+                }
             ?>
             <div class="reflection-field">
                 <label for="section_pdf">
                     Upload PDF / File
                     <?php if ( $pdf_required ) : ?><span style="color:#d63638;" aria-label="required">*</span><?php endif; ?>
                 </label>
+                <?php if ( $existing_pdf ) : ?>
+                <p class="reflection-hint" style="margin-bottom:.5em;">
+                    Currently attached:
+                    <a href="<?php echo esc_url( wp_get_attachment_url( $existing_pdf->ID ) ); ?>" target="_blank" rel="noopener">
+                        <?php echo esc_html( $existing_pdf->post_title ?: basename( wp_get_attachment_url( $existing_pdf->ID ) ) ); ?>
+                    </a>
+                    — leave the picker empty to keep it, or choose a new file to replace it.
+                </p>
+                <input type="hidden" name="reflsub_keep_pdf_id" value="<?php echo esc_attr( $existing_pdf->ID ); ?>">
+                <?php endif; ?>
                 <input type="file"
                        id="section_pdf"
                        name="section_pdf"
                        accept=".pdf,application/pdf"
-                       <?php if ( $pdf_required ) : ?>required<?php endif; ?>>
+                       <?php if ( $pdf_required && ! $existing_pdf ) : ?>required<?php endif; ?>>
                 <p class="reflection-hint">PDF only. Maximum 15 MB.</p>
             </div>
 
@@ -1272,6 +1328,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <input type="text"
                        id="section_tags_<?php echo $i; ?>"
                        name="section_tags_<?php echo $i; ?>"
+                       value="<?php echo esc_attr( $prefill[ $i ] ?? '' ); ?>"
                        placeholder="Comma-separated tags…">
                 <p class="reflection-hint">Add tags to help categorize your post.</p>
             </div>
