@@ -1,11 +1,15 @@
 <?php
 /**
  * Plugin Name:       Reflection Submissions
- * Description:       Frontend reflection submission form for course pages. Instructors configure prompts via ACF; students submit via [reflection_form] shortcode. Requires Advanced Custom Fields.
+ * Plugin URI:        https://github.com/nikolaigauer/reflection-submissions
+ * Description:       ePortfolio reflection plugin for higher education. Instructors build structured prompt pages via a section-based builder; students submit responses via the [reflection_form] shortcode. No external dependencies.
  * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      8.0
+ * Author:            Nikolai Gauer
+ * Author URI:        https://github.com/nikolaigauer
  * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       reflection-submissions
  */
 
