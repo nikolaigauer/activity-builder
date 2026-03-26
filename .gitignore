@@ -9,3 +9,7 @@
 
 # Logs / temp
 *.log
+
+# Dev-only folders
+test-reports/
+.claude/
