@@ -1,0 +1,6 @@
+# Files and folders to exclude from GitHub release archives
+.gitattributes export-ignore
+.gitignore export-ignore
+.claude/ export-ignore
+ROADMAP.md export-ignore
+test-reports/ export-ignore
