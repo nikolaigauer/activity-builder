@@ -1,4 +1,4 @@
-# Reflection Submissions
+# Activity Builder
 
 A WordPress plugin for structured reflection in higher-education ePortfolios.
 

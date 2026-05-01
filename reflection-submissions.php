@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       Reflection Submissions
+ * Plugin Name:       Activity Builder
  * Plugin URI:        https://github.com/nikolaigauer/reflection-submissions
  * Description:       ePortfolio reflection plugin for higher education. Instructors build structured prompt pages via a section-based builder; students submit responses via the [reflection_form] shortcode. No external dependencies.
  * Version:           1.0.0
@@ -10,7 +10,7 @@
  * Author URI:        https://github.com/nikolaigauer
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       reflection-submissions
+ * Text Domain:       activity-builder
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -52,29 +52,11 @@ function reflsub_register_content_type_taxonomy() {
 }
 
 
-// ── Term seeding ───────────────────────────────────────────────────────────────
-
-function reflsub_seed_default_terms() {
-    if ( ! taxonomy_exists( 'content-type' ) ) return;
-    if ( ! term_exists( 'reflection', 'content-type' ) ) {
-        wp_insert_term( 'Reflection', 'content-type', array( 'slug' => 'reflection' ) );
-    }
-}
-
-// One-time seed for sites where the plugin is activated on an existing install.
-add_action( 'init', function () {
-    if ( get_option( 'reflsub_terms_seeded' ) ) return;
-    reflsub_seed_default_terms();
-    update_option( 'reflsub_terms_seeded', '1' );
-}, 2 ); // priority 2 — after taxonomy registration at priority 0
-
-
 // ── Activation / deactivation ──────────────────────────────────────────────────
 
 register_activation_hook( __FILE__, 'reflsub_activate' );
 function reflsub_activate() {
     reflsub_register_content_type_taxonomy();
-    reflsub_seed_default_terms();
     flush_rewrite_rules();
 }
 

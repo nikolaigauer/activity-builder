@@ -25,7 +25,7 @@ function reflsub_feedback_register() {
 
     if ( current_user_can( 'manage_options' ) ) {
         add_submenu_page(
-            'reflection-submissions',
+            'activity-builder',
             'Feedback',
             'Feedback',
             'manage_options',
@@ -96,7 +96,7 @@ function reflsub_render_feedback_page() {
             <h1>Feedback</h1>
             <p style="color:#646970; font-size:14px;">
                 Select a submission from the
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=reflection-submissions' ) ); ?>">Submissions list</a>
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=activity-builder' ) ); ?>">Submissions list</a>
                 to give feedback.
             </p>
         </div>
@@ -152,7 +152,7 @@ function reflsub_render_feedback_page() {
     $next_id      = ( $current_idx !== false && $current_idx < count( $sibling_ids ) - 1 )
         ? $sibling_ids[ $current_idx + 1 ] : null;
 
-    $submissions_url = admin_url( 'admin.php?page=reflection-submissions' );
+    $submissions_url = admin_url( 'admin.php?page=activity-builder' );
     ?>
     <div class="wrap">
         <h1 style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
@@ -166,10 +166,10 @@ function reflsub_render_feedback_page() {
         </div>
         <?php endif; ?>
 
-        <div style="display:grid; grid-template-columns:1fr 360px; gap:24px; max-width:1280px; align-items:start;">
+        <div id="reflsub-feedback-layout" style="display:flex; max-width:1400px; align-items:start;">
 
             <!-- Left: submission content -->
-            <div>
+            <div id="reflsub-content-pane" style="flex:0 0 62%; min-width:280px; min-height:1px;">
                 <div style="background:#fff; border:1px solid #c3c4c7; border-radius:6px; overflow:hidden;">
 
                     <!-- Header bar -->
@@ -208,8 +208,17 @@ function reflsub_render_feedback_page() {
                 </div>
             </div>
 
+            <!-- Drag splitter -->
+            <div id="reflsub-splitter" title="Drag to resize"
+                 style="flex-shrink:0; width:14px; cursor:col-resize; align-self:stretch;
+                        display:flex; align-items:flex-start; justify-content:center; padding-top:80px;">
+                <div id="reflsub-splitter-handle"
+                     style="width:4px; height:48px; background:#c3c4c7; border-radius:2px;
+                            pointer-events:none; transition:background .15s;"></div>
+            </div>
+
             <!-- Right: feedback panel -->
-            <div style="position:sticky; top:32px;">
+            <div id="reflsub-feedback-pane" style="flex:1; min-width:260px; position:sticky; top:32px;">
                 <div style="background:#fff; border:1px solid #c3c4c7; border-radius:6px; overflow:hidden;">
 
                     <div style="padding:13px 20px; background:#f6f7f7; border-bottom:1px solid #c3c4c7;
@@ -290,8 +299,58 @@ function reflsub_render_feedback_page() {
 
             </div><!-- /right panel -->
 
-        </div><!-- /grid -->
+        </div><!-- /flex layout -->
     </div>
+
+    <script>
+    (function() {
+        var layout   = document.getElementById('reflsub-feedback-layout');
+        var leftPane = document.getElementById('reflsub-content-pane');
+        var splitter = document.getElementById('reflsub-splitter');
+        var handle   = document.getElementById('reflsub-splitter-handle');
+
+        var saved = localStorage.getItem('reflsub_split_pct');
+        if (saved) {
+            var pct = parseFloat(saved);
+            if (pct >= 20 && pct <= 82) leftPane.style.flex = '0 0 ' + pct + '%';
+        }
+
+        var dragging = false, startX = 0, startW = 0, totalW = 0;
+
+        splitter.addEventListener('mousedown', function(e) {
+            dragging = true;
+            startX   = e.clientX;
+            startW   = leftPane.getBoundingClientRect().width;
+            totalW   = layout.getBoundingClientRect().width;
+            document.body.style.cursor     = 'col-resize';
+            document.body.style.userSelect = 'none';
+            handle.style.background = '#2271b1';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            var pct = Math.max(20, Math.min(82, (startW + e.clientX - startX) / totalW * 100));
+            leftPane.style.flex = '0 0 ' + pct + '%';
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (!dragging) return;
+            dragging = false;
+            document.body.style.cursor = document.body.style.userSelect = '';
+            handle.style.background = '#c3c4c7';
+            var pct = leftPane.getBoundingClientRect().width / layout.getBoundingClientRect().width * 100;
+            localStorage.setItem('reflsub_split_pct', pct.toFixed(1));
+        });
+
+        splitter.addEventListener('mouseenter', function() {
+            if (!dragging) handle.style.background = '#2271b1';
+        });
+        splitter.addEventListener('mouseleave', function() {
+            if (!dragging) handle.style.background = '#c3c4c7';
+        });
+    })();
+    </script>
     <?php
 }
 

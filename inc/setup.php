@@ -23,7 +23,7 @@ add_action( 'admin_menu', 'reflsub_setup_register' );
 function reflsub_setup_register() {
     if ( ! current_user_can( 'manage_options' ) ) return;
     add_submenu_page(
-        'reflection-submissions',
+        'activity-builder',
         'Site Setup',
         'Setup',
         'manage_options',
@@ -47,7 +47,6 @@ function reflsub_handle_create_menu_set() {
     $nav_name     = sanitize_text_field( wp_unslash( $_POST['nav_name']     ?? '' ) );
     $child_name   = sanitize_text_field( wp_unslash( $_POST['child_name']   ?? '' ) );
     $create_child = ! empty( $_POST['create_child'] );
-    $child_type   = sanitize_key( $_POST['child_type'] ?? 'reflection' ); // reflection|plain
 
     $back_url = admin_url( 'admin.php?page=reflsub-setup' );
 
@@ -70,13 +69,9 @@ function reflsub_handle_create_menu_set() {
     $child_id = 0;
     if ( $create_child ) {
         if ( ! $child_name ) {
-            $child_name = ( $child_type === 'reflection' )
-                ? $parent_name . ' — Week 1'
-                : $parent_name . ' — Part 1';
+            $child_name = $parent_name . ' — 1';
         }
-        $child_id = ( $child_type === 'reflection' )
-            ? reflsub_setup_create_reflection_child( $parent_id, $child_name )
-            : reflsub_setup_create_plain_child( $parent_id, $child_name );
+        $child_id = reflsub_setup_create_reflection_child( $parent_id, $child_name );
     }
 
     // 3. Create (or update) the wp_navigation post
@@ -169,21 +164,27 @@ function reflsub_setup_create_reflection_child( $parent_id, $title ) {
 }
 
 /**
- * Create a plain (non-reflection) child page — used for assignment containers.
- */
-function reflsub_setup_create_plain_child( $parent_id, $title ) {
-    $content = '<!-- wp:paragraph --><p>Add your assignment description here.</p><!-- /wp:paragraph -->';
-    return reflsub_setup_find_or_create_page( $title, $parent_id, 'publish', $content );
-}
-
-/**
  * Create (or update) a wp_navigation post containing:
- *   - A navigation link to the parent page (renders as the section label)
- *   - A Page List block scoped to the parent's children (auto-updates as pages are added)
+ *   - A non-clickable navigation-link label (the parent page name)
+ *   - A Page List block nested inside it, scoped to the parent's children
+ *
+ * This produces a dropdown where hovering the label reveals all child pages.
+ * Child pages added later appear automatically — no menu editing needed.
  */
 function reflsub_setup_create_nav( $nav_title, $parent_id ) {
+    $parent_page  = get_post( $parent_id );
+    $parent_label = $parent_page ? $parent_page->post_title : $nav_title;
+
+    $link_attrs = wp_json_encode( array(
+        'label'         => $parent_label,
+        'url'           => '',
+        'opensInNewTab' => false,
+        'kind'          => 'custom',
+    ) );
+
     $nav_content = sprintf(
-        '<!-- wp:page-list {"parentPageID":%d} /-->',
+        "<!-- wp:navigation-link %s -->\n<!-- wp:page-list {\"parentPageID\":%d} /-->\n<!-- /wp:navigation-link -->",
+        $link_attrs,
         (int) $parent_id
     );
 
@@ -241,16 +242,14 @@ function reflsub_render_setup_page() {
     <div class="wrap">
         <h1>Site Setup</h1>
         <p style="color:#646970; max-width:680px;">
-            Create the standard page structure and navigation menus for your site.
+            Create the page structure and navigation menus for your site.
             Each menu uses a <strong>Page List</strong> block scoped to a parent page —
-            so every new child page you add automatically appears in the sidebar navigation.
+            new child pages appear in the menu automatically, wherever you choose to place it.
         </p>
 
         <?php if ( $notice === 'created' ) : ?>
         <div class="notice notice-success is-dismissible">
-            <p><strong>Done!</strong> Pages and navigation menu created.
-            Open the <a href="<?php echo esc_url( admin_url( 'site-editor.php?path=%2Fnavigation' ) ); ?>" target="_blank">Site Editor → Navigation</a>
-            to add the new menu to your template.</p>
+            <p><strong>Done!</strong> Pages and navigation menu created. Add the menu to any page or template using a Navigation block in the Site Editor.</p>
         </div>
         <?php elseif ( $notice === 'missing_name' ) : ?>
         <div class="notice notice-error is-dismissible"><p>Please enter a parent page name.</p></div>
@@ -398,19 +397,7 @@ function reflsub_render_setup_page() {
             }
             .reflsub-status-dot.ok  { background: #00a32a; }
             .reflsub-status-dot.err { background: #d63638; }
-            /* Tip box */
-            .reflsub-setup-tip {
-                max-width: 1080px;
-                margin: 0 0 24px;
-                padding: 16px 20px;
-                background: #fffbeb;
-                border: 1px solid #fde68a;
-                border-left: 4px solid #f59e0b;
-                border-radius: 0 6px 6px 0;
-                font-size: 13px;
-                line-height: 1.6;
-            }
-            .reflsub-setup-tip strong { color: #92400e; }
+          
             /* Custom menus list */
             .reflsub-custom-list {
                 margin: 16px 0 0;
@@ -428,19 +415,6 @@ function reflsub_render_setup_page() {
             .reflsub-custom-list li:last-child { border-bottom: none; }
         </style>
 
-        <!-- Tip box -->
-        <div class="reflsub-setup-tip">
-            <strong>How the auto-updating menus work:</strong>
-            Each menu created here uses WordPress's Page List block with a parent page filter.
-            As you add new child pages (or reflection pages via the builder) under the right parent,
-            they appear automatically in the sidebar navigation — no menu editing required.
-            After clicking <em>Create</em>, open
-            <a href="<?php echo esc_url( admin_url( 'site-editor.php?path=%2Fnavigation' ) ); ?>" target="_blank">
-                Site Editor → Navigation ↗
-            </a>
-            to add each new menu to your template.
-        </div>
-
         <div class="reflsub-setup-grid">
 
             <?php
@@ -450,24 +424,22 @@ function reflsub_render_setup_page() {
                     'type'         => 'reflections',
                     'icon'         => '🔵',
                     'title'        => 'Reflections',
-                    'description'  => 'Weekly reflection prompts. Creates a parent page and a sample reflection form child page.',
+                    'description'  => 'Weekly reflection prompts. Creates a parent page and a sample activity page.',
                     'default_parent' => 'Reflections',
                     'default_nav'    => 'Reflections Menu',
                     'default_child'  => 'Reflections — Week 1',
-                    'child_label'    => 'Create sample child page (Week 1 Reflection)',
-                    'child_type'     => 'reflection',
+                    'child_label'    => 'Create sample child page (Week 1)',
                     'saved'          => $saved_reflections,
                 ),
                 array(
                     'type'         => 'assignments',
                     'icon'         => '📋',
                     'title'        => 'Assignments',
-                    'description'  => 'Assignment containers. Creates a parent page and a sample plain-page child.',
+                    'description'  => 'Assignment activities. Creates a parent page and a sample activity page.',
                     'default_parent' => 'Assignments',
                     'default_nav'    => 'Assignments Menu',
                     'default_child'  => 'Assignment 1',
                     'child_label'    => 'Create sample child page (Assignment 1)',
-                    'child_type'     => 'plain',
                     'saved'          => $saved_assignments,
                 ),
                 array(
@@ -479,7 +451,6 @@ function reflsub_render_setup_page() {
                     'default_nav'    => '',
                     'default_child'  => '',
                     'child_label'    => 'Create a sample child page',
-                    'child_type'     => 'plain', // overridable
                     'saved'          => null, // custom stacks; handled separately
                 ),
             );
@@ -502,9 +473,6 @@ function reflsub_render_setup_page() {
                         <?php wp_nonce_field( 'reflsub_create_menu_set', 'reflsub_nonce' ); ?>
                         <input type="hidden" name="action"   value="reflsub_create_menu_set">
                         <input type="hidden" name="set_type" value="<?php echo esc_attr( $card['type'] ); ?>">
-                        <?php if ( $card['type'] !== 'custom' ) : ?>
-                        <input type="hidden" name="child_type" value="<?php echo esc_attr( $card['child_type'] ); ?>">
-                        <?php endif; ?>
 
                         <div class="reflsub-setup-field">
                             <label for="parent_name_<?php echo esc_attr( $card['type'] ); ?>">Parent page name</label>
@@ -524,18 +492,6 @@ function reflsub_render_setup_page() {
                                    value="<?php echo esc_attr( $has_record ? $saved['nav_name'] : $card['default_nav'] ); ?>"
                                    placeholder="e.g. Reflections Menu">
                         </div>
-
-                        <?php if ( $card['type'] === 'custom' ) : ?>
-                        <div class="reflsub-setup-field">
-                            <label>Child page type</label>
-                            <label style="font-weight:normal; display:flex; gap:6px; align-items:center; margin-bottom:4px;">
-                                <input type="radio" name="child_type" value="reflection" checked> Reflection form
-                            </label>
-                            <label style="font-weight:normal; display:flex; gap:6px; align-items:center;">
-                                <input type="radio" name="child_type" value="plain"> Plain page
-                            </label>
-                        </div>
-                        <?php endif; ?>
 
                         <div class="reflsub-setup-child-row">
                             <input type="checkbox" id="create_child_<?php echo esc_attr( $card['type'] ); ?>"
@@ -570,22 +526,36 @@ function reflsub_render_setup_page() {
                         array(
                             'ok'    => $saved['parent_ok'],
                             'label' => 'Parent page: ',
-                            'link'  => $saved['parent_ok'] ? get_edit_post_link( $saved['parent_id'] ) : null,
+                            'link'  => null,
                             'text'  => esc_html( $saved['parent_name'] ),
                         ),
                         array(
                             'ok'    => $saved['nav_ok'],
                             'label' => 'Navigation: ',
-                            'link'  => $saved['nav_ok'] ? admin_url( 'site-editor.php?postType=wp_navigation&postId=' . $saved['nav_id'] ) : null,
+                            'link'  => null,
                             'text'  => esc_html( $saved['nav_name'] ),
                         ),
                     );
-                    if ( ! empty( $saved['child_id'] ) ) {
+                    if ( $saved['parent_ok'] ) {
+                        $child_ids   = get_posts( array(
+                            'post_type'      => 'page',
+                            'post_parent'    => $saved['parent_id'],
+                            'post_status'    => array( 'publish', 'draft', 'private' ),
+                            'posts_per_page' => -1,
+                            'fields'         => 'ids',
+                            'no_found_rows'  => true,
+                        ) );
+                        $child_count = count( $child_ids );
+                        $pages_link  = $child_count > 0
+                            ? admin_url( 'admin.php?page=reflsub-pages' )
+                            : null;
                         $items[] = array(
-                            'ok'    => $saved['child_ok'],
-                            'label' => 'Child page: ',
-                            'link'  => $saved['child_ok'] ? get_edit_post_link( $saved['child_id'] ) : null,
-                            'text'  => esc_html( $saved['child_name'] ?: get_the_title( $saved['child_id'] ) ),
+                            'ok'    => $child_count > 0,
+                            'label' => 'Child pages: ',
+                            'link'  => $pages_link,
+                            'text'  => $child_count > 0
+                                ? $child_count . ' page' . ( $child_count !== 1 ? 's' : '' )
+                                : 'none yet',
                         );
                     }
                     foreach ( $items as $item ) :
@@ -641,22 +611,6 @@ function reflsub_render_setup_page() {
         </ul>
         <?php endif; ?>
 
-        <!-- After-setup guide -->
-        <?php
-        $any_created = ! empty( $saved_reflections ) || ! empty( $saved_assignments ) || ! empty( $saved_custom );
-        if ( $any_created ) :
-        ?>
-        <div style="max-width:680px; margin-top:28px; padding:18px 20px; background:#f6f7f7; border: 1px solid #c3c4c7; border-radius:6px;">
-            <h3 style="margin:0 0 10px; font-size:13px;">Next steps in the Site Editor</h3>
-            <ol style="margin:0; padding-left:18px; font-size:13px; line-height:1.8; color:#3c434a;">
-                <li>Open <a href="<?php echo esc_url( admin_url( 'site-editor.php?path=%2Fnavigation' ) ); ?>" target="_blank">Site Editor → Navigation ↗</a></li>
-                <li>Click the navigation block in your template where you want the menu to appear.</li>
-                <li>In the block settings panel, switch from "Page list" to your named menu (e.g. <em>Reflections Menu</em>) using the menu dropdown at the top of the settings.</li>
-                <li>Repeat for a second navigation block if you want both Reflections and Assignments menus in the sidebar.</li>
-                <li>Save the template — done. New pages assigned to the right parent page will appear automatically.</li>
-            </ol>
-        </div>
-        <?php endif; ?>
 
     </div><!-- /.wrap -->
     <?php

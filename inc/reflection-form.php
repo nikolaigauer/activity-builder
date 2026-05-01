@@ -323,21 +323,6 @@ function reflsub_handle_reflection_submission() {
         }
     }
 
-    // ── Content-type taxonomy ─────────────────────────────────────────────────
-    if ( taxonomy_exists( 'content-type' ) ) {
-        $ct_label = trim( get_post_meta( $page_id, 'content_type_label', true ) ) ?: 'Reflection';
-        $term = term_exists( $ct_label, 'content-type' );
-
-        if ( ! $term ) {
-            $term = wp_insert_term( $ct_label, 'content-type' );
-        }
-
-        if ( ! is_wp_error( $term ) ) {
-            $term_id = is_array( $term ) ? $term['term_id'] : $term;
-            wp_set_post_terms( $post_id, array( intval( $term_id ) ), 'content-type', true );
-        }
-    }
-
     // Post/Redirect/Get — back to the submission page
     wp_redirect( add_query_arg( 'reflection_submitted', '1', $redirect_base ) );
     exit;
@@ -606,19 +591,6 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     $final_content = implode( "\n\n", $final_parts );
     if ( $final_content !== $post_content ) {
         wp_update_post( array( 'ID' => $post_id, 'post_content' => $final_content ) );
-    }
-
-    // Content-type taxonomy — tag as Reflection
-    if ( taxonomy_exists( 'content-type' ) ) {
-        $ct_label = 'Reflection';
-        $term     = term_exists( $ct_label, 'content-type' );
-        if ( ! $term ) {
-            $term = wp_insert_term( $ct_label, 'content-type' );
-        }
-        if ( ! is_wp_error( $term ) ) {
-            $term_id = is_array( $term ) ? $term['term_id'] : $term;
-            wp_set_post_terms( $post_id, array( intval( $term_id ) ), 'content-type', true );
-        }
     }
 
     // Tags — always replace (not append) so edits can remove stale student tags.

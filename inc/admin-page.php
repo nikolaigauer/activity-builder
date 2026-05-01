@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin Page — Reflection Submissions
+ * Admin Page — Reflection Builder
  *
  * Adds a "Reflections" top-level menu (admin only) with:
  *   - Submissions list: all posts with _reflection_source_page meta,
@@ -21,10 +21,10 @@ function reflsub_add_admin_menu() {
     if ( ! current_user_can( 'manage_options' ) ) return;
 
     add_menu_page(
-        'Reflections',
-        'Reflections',
+        'Activity Builder',
+        'Activity Builder',
         'manage_options',
-        'reflection-submissions',
+        'activity-builder',
         'reflsub_render_submissions_page',
         'dashicons-welcome-write-blog',
         26
@@ -32,11 +32,11 @@ function reflsub_add_admin_menu() {
 
     // Primary submenu — matches top-level slug to avoid duplicate label
     add_submenu_page(
-        'reflection-submissions',
+        'activity-builder',
         'Submissions',
         'Submissions',
         'manage_options',
-        'reflection-submissions',
+        'activity-builder',
         'reflsub_render_submissions_page'
     );
 }
@@ -69,12 +69,17 @@ function reflsub_render_submissions_page() {
         ? sanitize_key( $_GET['sub_status'] )
         : 'all'; // default: show everything
 
-    // ── Student filter ────────────────────────────────────────────────────────
+    // ── Student + page filters ────────────────────────────────────────────────
     $student_filter = isset( $_GET['sub_student'] ) ? intval( $_GET['sub_student'] ) : 0;
+    $page_filter    = isset( $_GET['sub_page'] )    ? intval( $_GET['sub_page'] )    : 0;
 
     $query_status = ( $status_filter === 'all' )
         ? array( 'publish', 'pending', 'private', 'draft' )
         : array( $status_filter );
+
+    $meta_query = $page_filter
+        ? array( array( 'key' => '_reflection_source_page', 'value' => $page_filter ) )
+        : array( array( 'key' => '_reflection_source_page', 'compare' => 'EXISTS' ) );
 
     $query_args = array(
         'post_type'      => 'post',
@@ -82,17 +87,29 @@ function reflsub_render_submissions_page() {
         'posts_per_page' => 100,
         'orderby'        => 'date',
         'order'          => 'DESC',
-        'meta_query'     => array(
-            array(
-                'key'     => '_reflection_source_page',
-                'compare' => 'EXISTS',
-            ),
-        ),
+        'meta_query'     => $meta_query,
     );
     if ( $student_filter ) {
         $query_args['author'] = $student_filter;
     }
     $submissions = get_posts( $query_args );
+
+    // Build source-page options for the filter dropdown (always unfiltered)
+    $all_sub_ids = get_posts( array(
+        'post_type'      => 'post',
+        'post_status'    => array( 'publish', 'pending', 'private', 'draft' ),
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+        'meta_query'     => array( array( 'key' => '_reflection_source_page', 'compare' => 'EXISTS' ) ),
+    ) );
+    $source_page_options = array();
+    foreach ( $all_sub_ids as $sid ) {
+        $pid = intval( get_post_meta( $sid, '_reflection_source_page', true ) );
+        if ( $pid && ! isset( $source_page_options[ $pid ] ) ) {
+            $source_page_options[ $pid ] = get_the_title( $pid );
+        }
+    }
+    asort( $source_page_options );
 
     $status_labels = array(
         'publish' => array( 'label' => 'Published', 'color' => '#00a32a' ),
@@ -102,14 +119,14 @@ function reflsub_render_submissions_page() {
         'trash'   => array( 'label' => 'Trash',     'color' => '#d63638' ),
     );
 
-    $page_url     = admin_url( 'admin.php?page=reflection-submissions' );
+    $page_url     = admin_url( 'admin.php?page=activity-builder' );
     $new_page_url = admin_url( 'admin.php?page=reflsub-build' );
     ?>
     <div class="wrap">
         <h1 style="display:flex; align-items:center; gap:16px;">
-            Reflection Submissions
+            Activity Builder
             <a href="<?php echo esc_url( $new_page_url ); ?>" class="page-title-action">
-                + New Reflection Page
+                + New Activity Page
             </a>
         </h1>
 
@@ -118,6 +135,9 @@ function reflsub_render_submissions_page() {
         if ( $student_filter ) :
             $filtered_student = get_userdata( $student_filter );
             $clear_student_url = add_query_arg( 'sub_status', $status_filter, $page_url );
+            if ( $page_filter ) {
+                $clear_student_url = add_query_arg( 'sub_page', $page_filter, $clear_student_url );
+            }
         ?>
         <div style="margin-bottom:12px; padding:8px 14px; background:#f0f6fc; border-left:4px solid #2271b1; border-radius:0 4px 4px 0; display:flex; align-items:center; gap:12px;">
             <span>Showing submissions by <strong><?php echo esc_html( $filtered_student ? $filtered_student->display_name : "User #{$student_filter}" ); ?></strong></span>
@@ -125,17 +145,50 @@ function reflsub_render_submissions_page() {
         </div>
         <?php endif; ?>
 
-        <div style="margin-bottom: 16px;">
+        <div style="margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
             <?php foreach ( array( 'all' => 'All', 'pending' => 'Pending', 'publish' => 'Published', 'private' => 'Private', 'trash' => 'Trash' ) as $slug => $label ) :
                 $tab_url = add_query_arg( 'sub_status', $slug, $page_url );
                 if ( $student_filter ) {
                     $tab_url = add_query_arg( 'sub_student', $student_filter, $tab_url );
                 }
+                if ( $page_filter ) {
+                    $tab_url = add_query_arg( 'sub_page', $page_filter, $tab_url );
+                }
             ?>
             <a href="<?php echo esc_url( $tab_url ); ?>"
                class="button <?php echo $status_filter === $slug ? 'button-primary' : ''; ?>"
-               style="margin-right: 4px;"><?php echo esc_html( $label ); ?></a>
+               ><?php echo esc_html( $label ); ?></a>
             <?php endforeach; ?>
+            </div>
+
+            <?php if ( ! empty( $source_page_options ) ) : ?>
+            <form method="get" style="display:flex; align-items:center; gap:8px; margin:0;">
+                <input type="hidden" name="page" value="activity-builder">
+                <?php if ( $student_filter ) : ?>
+                <input type="hidden" name="sub_student" value="<?php echo esc_attr( $student_filter ); ?>">
+                <?php endif; ?>
+                <?php if ( $status_filter !== 'all' ) : ?>
+                <input type="hidden" name="sub_status" value="<?php echo esc_attr( $status_filter ); ?>">
+                <?php endif; ?>
+                <label for="reflsub-page-filter" style="font-size:13px; color:#646970; white-space:nowrap;">Page:</label>
+                <select id="reflsub-page-filter" name="sub_page" onchange="this.form.submit()"
+                        style="height:30px; border:1px solid #8c8f94; border-radius:3px; padding:0 8px; font-size:13px; color:#1d2327;">
+                    <option value="">All pages</option>
+                    <?php foreach ( $source_page_options as $pid => $ptitle ) : ?>
+                    <option value="<?php echo esc_attr( $pid ); ?>" <?php selected( $page_filter, $pid ); ?>>
+                        <?php echo esc_html( $ptitle ); ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if ( $page_filter ) : ?>
+                <a href="<?php echo esc_url( add_query_arg( array( 'page' => 'activity-builder', 'sub_status' => $status_filter ), admin_url( 'admin.php' ) ) ); ?>"
+                   class="button button-small" title="Clear page filter">✕</a>
+                <?php endif; ?>
+            </form>
+            <?php endif; ?>
+
         </div>
 
         <?php if ( empty( $submissions ) ) : ?>
@@ -147,7 +200,7 @@ function reflsub_render_submissions_page() {
                 <tr>
                     <th style="width:22%">Student</th>
                     <th style="width:28%">Submission</th>
-                    <th style="width:22%">Week / Page</th>
+                    <th style="width:22%">Page</th>
                     <th style="width:12%">Date</th>
                     <th style="width:8%">Status</th>
                     <th style="width:8%">Actions</th>
@@ -207,10 +260,11 @@ function reflsub_render_submissions_page() {
                     </span>
                 </td>
                 <td>
-                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                    <div style="display:flex; flex-direction:column; gap:4px;">
                     <a href="<?php echo esc_url( $feedback_url ); ?>"
                        class="button button-small"
                        style="font-size:11px; height:24px; line-height:22px; padding:0 8px;
+                              text-align:center; box-sizing:border-box;
                               <?php echo $has_feedback ? 'color:#00a32a; border-color:#00a32a;' : ''; ?>">
                         <?php echo $has_feedback ? '● Feedback' : 'Feedback'; ?>
                     </a>
@@ -220,7 +274,8 @@ function reflsub_render_submissions_page() {
                         <input type="hidden" name="reflsub_action"  value="approve">
                         <input type="hidden" name="reflsub_post_id" value="<?php echo esc_attr( $sub->ID ); ?>">
                         <button type="submit" class="button button-primary"
-                                style="font-size:11px; height:24px; line-height:22px; padding:0 8px;">
+                                style="font-size:11px; height:24px; line-height:22px; padding:0 8px;
+                                       width:100%; box-sizing:border-box;">
                             Approve
                         </button>
                     </form>
@@ -232,7 +287,8 @@ function reflsub_render_submissions_page() {
                         <input type="hidden" name="reflsub_action"  value="trash">
                         <input type="hidden" name="reflsub_post_id" value="<?php echo esc_attr( $sub->ID ); ?>">
                         <button type="submit" class="button"
-                                style="font-size:11px; height:24px; line-height:22px; padding:0 8px; color:#d63638;">
+                                style="font-size:11px; height:24px; line-height:22px; padding:0 8px;
+                                       color:#d63638; width:100%; box-sizing:border-box;">
                             Trash
                         </button>
                     </form>
@@ -262,7 +318,7 @@ function reflsub_toolbar_new_reflection_page( $wp_admin_bar ) {
     $wp_admin_bar->add_node( array(
         'parent' => 'new-content',
         'id'     => 'reflsub-new-reflection-page',
-        'title'  => 'Reflection Page',
+        'title'  => 'Activity Page',
         'href'   => $url,
     ) );
 }
@@ -278,7 +334,7 @@ function reflsub_create_reflection_page() {
     check_admin_referer( 'reflsub_new_reflection_page' );
 
     $page_id = wp_insert_post( array(
-        'post_title'   => 'Reflection — Week',
+        'post_title'   => 'Activity —',
         'post_content' => '<!-- wp:shortcode -->[reflection_form]<!-- /wp:shortcode -->',
         'post_status'  => 'draft',
         'post_type'    => 'page',

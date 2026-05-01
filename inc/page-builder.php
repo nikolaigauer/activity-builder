@@ -23,16 +23,16 @@ function reflsub_page_builder_register() {
     }
 
     add_submenu_page(
-        'reflection-submissions',
-        'Reflection Pages',
-        'Reflection Pages',
+        'activity-builder',
+        'Activity Pages',
+        'Activity Pages',
         'manage_options',
         'reflsub-pages',
         'reflsub_render_pages_list'
     );
 
     add_submenu_page(
-        'reflection-submissions',
+        'activity-builder',
         'Build a Page',
         'Build a Page',
         'manage_options',
@@ -85,7 +85,7 @@ function reflsub_ajax_create_parent_page() {
 }
 
 
-// ── Reflection Pages list ─────────────────────────────────────────────────────
+// ── Activity Pages list ─────────────────────────────────────────────────────
 
 function reflsub_render_pages_list() {
     // Handle delete action
@@ -123,7 +123,7 @@ function reflsub_render_pages_list() {
     ?>
     <div class="wrap">
         <h1 style="display:flex; align-items:center; gap:16px;">
-            Reflection Pages
+            Activity Pages
             <a href="<?php echo esc_url( $build_url ); ?>" class="page-title-action">+ Build a Page</a>
         </h1>
 
@@ -259,7 +259,7 @@ function reflsub_render_page_builder() {
     ) );
 
     $form_action = admin_url( 'admin-post.php' );
-    $heading     = $is_edit ? 'Edit Reflection Page' : 'Build a Reflection Page';
+    $heading     = $is_edit ? 'Edit Activity Page' : 'Build an Activity Page';
     $subtitle    = $is_edit
         ? 'Update settings and form sections for this page.'
         : 'Configure settings and build the form students will complete.';

@@ -23,7 +23,7 @@ function reflsub_progress_register() {
     }
 
     add_submenu_page(
-        'reflection-submissions',
+        'activity-builder',
         'Progress',
         'Progress',
         'manage_options',
