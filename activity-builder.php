@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Activity Builder
- * Plugin URI:        https://github.com/nikolaigauer/reflection-submissions
+ * Plugin URI:        https://github.com/nikolaigauer/activity-builder
  * Description:       ePortfolio reflection plugin for higher education. Instructors build structured prompt pages via a section-based builder; students submit responses via the [reflection_form] shortcode. No external dependencies.
  * Version:           1.0.0
  * Requires at least: 6.0

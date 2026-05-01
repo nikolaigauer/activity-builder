@@ -82,7 +82,7 @@ Do this before a public/ETUG release so the plugin has zero required dependencie
 
 ## Dashboard Menu: Theme + Plugin Handshake
 
-When both the ePortfolio theme and the reflection-submissions plugin are active,
+When both the ePortfolio theme and the Activity Builder plugin are active,
 the combined admin sidebar should feel like a single coherent product — not two
 separate tools bolted together. When only one is active, each should still present
 a logical, self-contained menu.
