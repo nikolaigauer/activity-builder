@@ -25,18 +25,27 @@ function reflsub_add_admin_menu() {
         'Activity Builder',
         'manage_options',
         'activity-builder',
-        'reflsub_render_submissions_page',
+        'reflsub_render_pages_list',
         'dashicons-welcome-write-blog',
         26
     );
 
-    // Primary submenu — matches top-level slug to avoid duplicate label
+    // Primary submenu — matches top-level slug; Activity Pages is the default landing view
+    add_submenu_page(
+        'activity-builder',
+        'Activity Pages',
+        'Activity Pages',
+        'manage_options',
+        'activity-builder',
+        'reflsub_render_pages_list'
+    );
+
     add_submenu_page(
         'activity-builder',
         'Submissions',
         'Submissions',
         'manage_options',
-        'activity-builder',
+        'reflsub-submissions',
         'reflsub_render_submissions_page'
     );
 }
@@ -119,7 +128,7 @@ function reflsub_render_submissions_page() {
         'trash'   => array( 'label' => 'Trash',     'color' => '#d63638' ),
     );
 
-    $page_url     = admin_url( 'admin.php?page=activity-builder' );
+    $page_url     = admin_url( 'admin.php?page=reflsub-submissions' );
     $new_page_url = admin_url( 'admin.php?page=reflsub-build' );
     ?>
     <div class="wrap">
@@ -141,7 +150,7 @@ function reflsub_render_submissions_page() {
         ?>
         <div style="margin-bottom:12px; padding:8px 14px; background:#f0f6fc; border-left:4px solid #2271b1; border-radius:0 4px 4px 0; display:flex; align-items:center; gap:12px;">
             <span>Showing submissions by <strong><?php echo esc_html( $filtered_student ? $filtered_student->display_name : "User #{$student_filter}" ); ?></strong></span>
-            <a href="<?php echo esc_url( $clear_student_url ); ?>" class="button button-small">✕ All students</a>
+            <a href="<?php echo esc_url( $clear_student_url ); ?>" class="button button-small">x All students</a>
         </div>
         <?php endif; ?>
 
@@ -165,7 +174,7 @@ function reflsub_render_submissions_page() {
 
             <?php if ( ! empty( $source_page_options ) ) : ?>
             <form method="get" style="display:flex; align-items:center; gap:8px; margin:0;">
-                <input type="hidden" name="page" value="activity-builder">
+                <input type="hidden" name="page" value="reflsub-submissions">
                 <?php if ( $student_filter ) : ?>
                 <input type="hidden" name="sub_student" value="<?php echo esc_attr( $student_filter ); ?>">
                 <?php endif; ?>
@@ -183,8 +192,8 @@ function reflsub_render_submissions_page() {
                     <?php endforeach; ?>
                 </select>
                 <?php if ( $page_filter ) : ?>
-                <a href="<?php echo esc_url( add_query_arg( array( 'page' => 'activity-builder', 'sub_status' => $status_filter ), admin_url( 'admin.php' ) ) ); ?>"
-                   class="button button-small" title="Clear page filter">✕</a>
+                <a href="<?php echo esc_url( add_query_arg( array( 'page' => 'reflsub-submissions', 'sub_status' => $status_filter ), admin_url( 'admin.php' ) ) ); ?>"
+                   class="button button-small" title="Clear page filter">x</a>
                 <?php endif; ?>
             </form>
             <?php endif; ?>

@@ -160,9 +160,10 @@ function reflsub_render_post_form() {
                     <div id="reflsub-post-sections"></div>
                     <div class="reflsub-add-palette">
                         <span class="reflsub-add-label">+ Add</span>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('text')">✏️ Text</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('image')">🖼️ Image(s)</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('embed')">🔗 Embed / URL</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('text')">Text</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('image')">Image(s)</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('pdf')">PDF / File</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('embed')">Embed / URL</button>
                     </div>
                 </div>
             </div>
@@ -359,6 +360,30 @@ function reflsub_render_post_form() {
         }
         .reflsub-tag-chip:hover { background: #1b28b4; color: #f3feca; border-color: #1b28b4; }
 
+        /* ── PDF drop zone ─────────────────────────────────────────── */
+        .reflsub-pdf-drop-zone {
+            position: relative; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 6px;
+            min-height: 90px; padding: 20px;
+            border: 2px dashed #ace7d4; border-radius: 9px;
+            background: #f8fafc; cursor: pointer;
+            transition: border-color .15s, background .15s;
+            text-align: center;
+        }
+        .reflsub-pdf-drop-zone:hover,
+        .reflsub-pdf-drop-zone.reflsub-pdf-drag-over {
+            border-color: #1b28b4; background: #f3feca;
+        }
+        .reflsub-pdf-drop-label {
+            font-size: 13px; color: #64748b; font-weight: 500; pointer-events: none;
+        }
+        .reflsub-pdf-filename {
+            font-size: 13px; color: #1b28b4; font-weight: 600; pointer-events: none;
+            word-break: break-all;
+        }
+        .reflsub-pdf-has-file { border-color: #1b28b4; background: #f3feca; }
+        .reflsub-pdf-has-file .reflsub-pdf-drop-label { display: none; }
+
         /* ── Section reorder ───────────────────────────────────────── */
         .reflsub-drag-handle {
             cursor: grab; font-size: 18px; color: #94a3b8;
@@ -453,7 +478,7 @@ function reflsub_render_post_form() {
             div.className = 'reflsub-post-section';
             div.dataset.type = type;
 
-            var labels = { text: 'Text', image: 'Image(s)', embed: 'Embed / URL' };
+            var labels = { text: 'Text', image: 'Image(s)', pdf: 'PDF / File', embed: 'Embed / URL' };
 
             var header = '<div class="reflsub-post-section-header">' +
                 '<div style="display:flex;align-items:center;gap:8px;">' +
@@ -481,6 +506,15 @@ function reflsub_render_post_form() {
                 return '<button type="button" class="button" onclick="reflsubSelectImages(this)">Select Image(s)</button>' +
                     '<div class="reflsub-image-thumbs"></div>' +
                     '<input type="hidden" class="reflsub-image-ids" value="">';
+            }
+            if (type === 'pdf') {
+                var inputName = 'reflsub_post_pdf_' + id;
+                return '<div class="reflsub-pdf-drop-zone" onclick="this.querySelector(\'input[type=file]\').click()">' +
+                    '<span class="reflsub-pdf-drop-label">Drop a file here or click to browse</span>' +
+                    '<span class="reflsub-pdf-filename"></span>' +
+                    '<input type="file" name="' + inputName + '" class="reflsub-pdf-file-input" accept=".pdf,.doc,.docx,.ppt,.pptx" style="display:none;">' +
+                    '</div>' +
+                    '<p style="margin:6px 0 0; font-size:12px; color:#64748b;">PDF, Word, or PowerPoint — max 15 MB.</p>';
             }
             if (type === 'embed') {
                 return '<label style="font-size:12px; font-weight:600; color:#50575e; display:block; margin-bottom:4px;">URL or Embed Code</label>' +
@@ -525,6 +559,36 @@ function reflsub_render_post_form() {
 
         // ── Serialise sections before submit ───────────────────────────────────
 
+        // PDF drop zone: show filename on file select, support native drag-and-drop
+        document.addEventListener('change', function(e) {
+            if (!e.target.classList.contains('reflsub-pdf-file-input')) return;
+            var zone = e.target.closest('.reflsub-pdf-drop-zone');
+            var label = zone.querySelector('.reflsub-pdf-filename');
+            label.textContent = e.target.files[0] ? e.target.files[0].name : '';
+            zone.classList.toggle('reflsub-pdf-has-file', !!e.target.files[0]);
+        });
+        document.addEventListener('dragover', function(e) {
+            var zone = e.target.closest('.reflsub-pdf-drop-zone');
+            if (zone) { e.preventDefault(); zone.classList.add('reflsub-pdf-drag-over'); }
+        });
+        document.addEventListener('dragleave', function(e) {
+            var zone = e.target.closest('.reflsub-pdf-drop-zone');
+            if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('reflsub-pdf-drag-over');
+        });
+        document.addEventListener('drop', function(e) {
+            var zone = e.target.closest('.reflsub-pdf-drop-zone');
+            if (!zone) return;
+            e.preventDefault();
+            zone.classList.remove('reflsub-pdf-drag-over');
+            var input = zone.querySelector('.reflsub-pdf-file-input');
+            if (e.dataTransfer.files.length) {
+                input.files = e.dataTransfer.files;
+                var label = zone.querySelector('.reflsub-pdf-filename');
+                label.textContent = e.dataTransfer.files[0].name;
+                zone.classList.add('reflsub-pdf-has-file');
+            }
+        });
+
         document.getElementById('reflsub-post-form').addEventListener('submit', function() {
             var sections = [];
             document.querySelectorAll('#reflsub-post-sections .reflsub-post-section').forEach(function(el) {
@@ -536,6 +600,7 @@ function reflsub_render_post_form() {
                 } else if (type === 'embed') {
                     sections.push({ type: 'embed', content: el.querySelector('.reflsub-post-embed').value });
                 }
+                // pdf sections are handled via $_FILES — excluded from JSON
             });
             document.getElementById('reflsub-sections-data').value = JSON.stringify(sections);
         });
@@ -689,6 +754,28 @@ function reflsub_handle_create_post() {
     // Tags
     if ( ! empty( $tags ) ) {
         wp_set_post_tags( $post_id, $tags );
+    }
+
+    // File uploads (PDF / File sections)
+    if ( ! empty( $_FILES ) ) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        foreach ( $_FILES as $key => $file ) {
+            if ( strpos( $key, 'reflsub_post_pdf_' ) !== 0 ) continue;
+            if ( $file['error'] !== UPLOAD_ERR_OK || empty( $file['name'] ) ) continue;
+            $upload = wp_handle_upload( $file, array( 'test_form' => false ) );
+            if ( isset( $upload['file'] ) && ! isset( $upload['error'] ) ) {
+                $att_id = wp_insert_attachment( array(
+                    'post_mime_type' => $upload['type'],
+                    'post_title'     => sanitize_file_name( $file['name'] ),
+                    'post_content'   => '',
+                    'post_status'    => 'inherit',
+                ), $upload['file'], $post_id );
+                if ( $att_id && ! is_wp_error( $att_id ) ) {
+                    wp_update_attachment_metadata( $att_id, wp_generate_attachment_metadata( $att_id, $upload['file'] ) );
+                }
+            }
+        }
     }
 
     // Content-type taxonomy

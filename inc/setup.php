@@ -275,19 +275,24 @@ function reflsub_render_setup_page() {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                padding: 14px 20px;
-                background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
-                color: #fff;
+                padding: 13px 20px;
+                background: #f8fafc;
+                border-bottom: 1px solid #e2e8f0;
             }
             .reflsub-setup-card-header h2 {
                 margin: 0;
-                font-size: 15px;
-                font-weight: 600;
-                color: #fff;
+                font-size: 13px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: .08em;
+                color: #1b28b4;
             }
             .reflsub-setup-card-header .card-icon {
-                font-size: 20px;
+                color: #64748b;
+                font-size: 18px;
                 line-height: 1;
+                display: flex;
+                align-items: center;
             }
             .reflsub-setup-card-body {
                 padding: 18px 20px;
@@ -314,8 +319,8 @@ function reflsub_render_setup_page() {
             }
             .reflsub-setup-field input[type="text"]:focus {
                 outline: none;
-                border-color: #f59e0b;
-                box-shadow: 0 0 0 2px rgba(245,158,11,.25);
+                border-color: #1b28b4;
+                box-shadow: 0 0 0 2px rgba(27,40,180,.18);
             }
             .reflsub-setup-child-row {
                 display: flex;
@@ -329,7 +334,7 @@ function reflsub_render_setup_page() {
             }
             .reflsub-setup-child-row input[type="checkbox"] {
                 margin-top: 3px;
-                accent-color: #f59e0b;
+                accent-color: #1b28b4;
             }
             .reflsub-setup-child-row label {
                 font-size: 13px;
@@ -354,18 +359,19 @@ function reflsub_render_setup_page() {
                 padding-top: 4px;
             }
             .reflsub-setup-btn {
-                background: #f59e0b;
-                color: #1c1917 !important;
+                background: #ff4128;
+                color: #fff !important;
                 border: none;
-                border-radius: 4px;
+                border-radius: 6px;
                 padding: 8px 18px;
                 font-size: 13px;
                 font-weight: 700;
                 cursor: pointer;
                 transition: background .15s;
+                box-shadow: 0 2px 6px rgba(255,65,40,.35);
             }
             .reflsub-setup-btn:hover {
-                background: #b45309;
+                background: #d63210;
                 color: #fff !important;
             }
             /* Status section */
@@ -422,7 +428,7 @@ function reflsub_render_setup_page() {
             $cards = array(
                 array(
                     'type'         => 'reflections',
-                    'icon'         => '🔵',
+                    'icon'         => 'dashicons-book',
                     'title'        => 'Reflections',
                     'description'  => 'Weekly reflection prompts. Creates a parent page and a sample activity page.',
                     'default_parent' => 'Reflections',
@@ -433,7 +439,7 @@ function reflsub_render_setup_page() {
                 ),
                 array(
                     'type'         => 'assignments',
-                    'icon'         => '📋',
+                    'icon'         => 'dashicons-list-view',
                     'title'        => 'Assignments',
                     'description'  => 'Assignment activities. Creates a parent page and a sample activity page.',
                     'default_parent' => 'Assignments',
@@ -444,7 +450,7 @@ function reflsub_render_setup_page() {
                 ),
                 array(
                     'type'         => 'custom',
-                    'icon'         => '➕',
+                    'icon'         => 'dashicons-plus-alt2',
                     'title'        => 'Additional Menu',
                     'description'  => 'Create any additional parent page + auto-updating menu.',
                     'default_parent' => '',
@@ -461,7 +467,7 @@ function reflsub_render_setup_page() {
             ?>
             <div class="reflsub-setup-card">
                 <div class="reflsub-setup-card-header">
-                    <span class="card-icon"><?php echo $card['icon']; ?></span>
+                    <span class="card-icon"><span class="dashicons <?php echo esc_attr( $card['icon'] ); ?>"></span></span>
                     <h2><?php echo esc_html( $card['title'] ); ?></h2>
                 </div>
                 <div class="reflsub-setup-card-body">
@@ -591,20 +597,17 @@ function reflsub_render_setup_page() {
             <li>
                 <span class="reflsub-status-dot <?php echo $r['nav_ok'] ? 'ok' : 'err'; ?>"></span>
                 <strong><?php echo esc_html( $r['nav_name'] ); ?></strong>
+                <?php if ( ! $r['parent_ok'] ) : ?>
+                    &nbsp;<span style="color:#d63638;">(parent deleted)</span>
+                <?php endif; ?>
                 &nbsp;·&nbsp;
-                <?php if ( $r['parent_ok'] ) : ?>
-                    <a href="<?php echo esc_url( get_edit_post_link( $r['parent_id'] ) ); ?>" target="_blank">
-                        <?php echo esc_html( $r['parent_name'] ); ?> ↗
-                    </a>
-                <?php else : ?>
-                    <span style="color:#d63638;"><?php echo esc_html( $r['parent_name'] ); ?> (deleted)</span>
-                <?php endif; ?>
-                <?php if ( $r['nav_ok'] ) : ?>
-                    &nbsp;·&nbsp;
-                    <a href="<?php echo esc_url( admin_url( 'site-editor.php?postType=wp_navigation&postId=' . $r['nav_id'] ) ); ?>" target="_blank">
-                        Edit in Site Editor ↗
-                    </a>
-                <?php endif; ?>
+                <?php
+                $new_page_url = admin_url( 'admin.php?page=reflsub-build' );
+                if ( $r['parent_ok'] ) {
+                    $new_page_url = add_query_arg( 'parent_id', $r['parent_id'], $new_page_url );
+                }
+                ?>
+                <a href="<?php echo esc_url( $new_page_url ); ?>">+ New Activity Page</a>
                 <small style="color:#646970; margin-left:auto;"><?php echo esc_html( substr( $r['created_at'] ?? '', 0, 10 ) ); ?></small>
             </li>
             <?php endforeach; ?>

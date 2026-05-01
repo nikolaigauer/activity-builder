@@ -24,17 +24,8 @@ function reflsub_page_builder_register() {
 
     add_submenu_page(
         'activity-builder',
-        'Activity Pages',
-        'Activity Pages',
-        'manage_options',
-        'reflsub-pages',
-        'reflsub_render_pages_list'
-    );
-
-    add_submenu_page(
-        'activity-builder',
-        'Build a Page',
-        'Build a Page',
+        'New Activity Page',
+        'New Activity Page',
         'manage_options',
         'reflsub-build',
         'reflsub_render_page_builder'
@@ -97,7 +88,7 @@ function reflsub_render_pages_list() {
         $del_id = intval( $_GET['reflsub_delete'] );
         if ( $del_id && current_user_can( 'manage_options' ) ) {
             wp_trash_post( $del_id );
-            echo '<div class="notice notice-success is-dismissible"><p>Reflection page moved to trash.</p></div>';
+            echo '<div class="notice notice-success is-dismissible"><p>Activity page moved to trash.</p></div>';
         }
     }
 
@@ -124,17 +115,17 @@ function reflsub_render_pages_list() {
     <div class="wrap">
         <h1 style="display:flex; align-items:center; gap:16px;">
             Activity Pages
-            <a href="<?php echo esc_url( $build_url ); ?>" class="page-title-action">+ Build a Page</a>
+            <a href="<?php echo esc_url( $build_url ); ?>" class="page-title-action">+ New Activity Page</a>
         </h1>
 
         <?php if ( isset( $_GET['reflsub_saved'] ) ) : ?>
         <div class="notice notice-success is-dismissible">
-            <p><?php echo $_GET['reflsub_saved'] === 'created' ? 'Reflection page created.' : 'Reflection page updated.'; ?></p>
+            <p><?php echo $_GET['reflsub_saved'] === 'created' ? 'Activity page created.' : 'Activity page updated.'; ?></p>
         </div>
         <?php endif; ?>
 
         <?php if ( empty( $pages ) ) : ?>
-        <p style="color:#646970; font-style:italic;">No reflection pages yet. <a href="<?php echo esc_url( $build_url ); ?>">Build one now.</a></p>
+        <p style="color:#646970; font-style:italic;">No activity pages yet. <a href="<?php echo esc_url( $build_url ); ?>">Build one now.</a></p>
         <?php else : ?>
         <table class="wp-list-table widefat fixed striped" style="max-width:1100px;">
             <thead>
@@ -170,7 +161,7 @@ function reflsub_render_pages_list() {
 
                 $edit_url   = admin_url( 'admin.php?page=reflsub-build&edit=' . $page->ID );
                 $delete_url = wp_nonce_url(
-                    admin_url( 'admin.php?page=reflsub-pages&reflsub_delete=' . $page->ID ),
+                    admin_url( 'admin.php?page=activity-builder&reflsub_delete=' . $page->ID ),
                     'reflsub_delete_page_' . $page->ID
                 );
                 $view_url   = get_permalink( $page->ID );
@@ -200,14 +191,14 @@ function reflsub_render_pages_list() {
                     <a href="<?php echo esc_url( $view_url ); ?>" class="button button-small" target="_blank">View</a>
                     <a href="<?php echo esc_url( $delete_url ); ?>" class="button button-small"
                        style="color:#d63638;"
-                       onclick="return confirm('Move this reflection page to trash?');">Trash</a>
+                       onclick="return confirm('Move this activity page to trash?');">Trash</a>
                 </td>
             </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
         <p style="margin-top:8px; color:#646970; font-size:12px;">
-            <?php echo count( $pages ); ?> reflection page<?php echo count( $pages ) !== 1 ? 's' : ''; ?>.
+            <?php echo count( $pages ); ?> activity page<?php echo count( $pages ) !== 1 ? 's' : ''; ?>.
         </p>
         <?php endif; ?>
     </div>
@@ -278,7 +269,7 @@ function reflsub_render_page_builder() {
                 <h1><?php echo esc_html( $heading ); ?></h1>
                 <p><?php echo esc_html( $subtitle ); ?></p>
             </div>
-            <a href="<?php echo esc_url( admin_url( 'admin.php?page=reflsub-pages' ) ); ?>" class="reflsub-back-link">
+            <a href="<?php echo esc_url( admin_url( 'admin.php?page=activity-builder' ) ); ?>" class="reflsub-back-link">
                 ← All Pages
             </a>
         </div>
@@ -398,14 +389,14 @@ function reflsub_render_page_builder() {
                     <div id="reflsub-sections"></div>
                     <div class="reflsub-add-palette">
                         <span class="reflsub-add-label">+ Add section</span>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('prompt')">✏️ Prompt</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('mcq')">☑️ Multiple Choice</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('image')">🖼️ Image</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('video')">▶️ Video URL</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('embed')">🔗 Embed</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('tags')">🏷️ Student Tags</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('pdf')">📄 PDF / File</button>
-                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('re_reflect')">🔁 Re-reflect</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('prompt')">Prompt</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('mcq')">Multiple Choice</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('image')">Image</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('video')">Video URL</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('embed')">Embed</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('tags')">Student Tags</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('pdf')">PDF / File</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('re_reflect')">Re-reflect</button>
                     </div>
                 </div>
             </div>
@@ -414,7 +405,7 @@ function reflsub_render_page_builder() {
                 <button type="submit" name="reflsub_submit" class="reflsub-btn-primary">
                     <?php echo $is_edit ? 'Update Page' : 'Create Page'; ?>
                 </button>
-                <a href="<?php echo esc_url( admin_url( 'admin.php?page=reflsub-pages' ) ); ?>" class="reflsub-btn-ghost">
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=activity-builder' ) ); ?>" class="reflsub-btn-ghost">
                     Cancel
                 </a>
             </div>
@@ -1225,6 +1216,6 @@ function reflsub_save_reflection_page() {
     update_post_meta( $saved_id, '_reflsub_auto_tags',  $auto_tags_val );
 
     $saved_flag = $is_new ? 'created' : 'updated';
-    wp_redirect( admin_url( 'admin.php?page=reflsub-pages&reflsub_saved=' . $saved_flag ) );
+    wp_redirect( admin_url( 'admin.php?page=activity-builder&reflsub_saved=' . $saved_flag ) );
     exit;
 }

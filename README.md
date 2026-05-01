@@ -1,8 +1,12 @@
 # Activity Builder
 
-A WordPress plugin for structured reflection in higher-education ePortfolios.
+A WordPress plugin for structured activities and reflection in higher-education ePortfolios.
 
-Instructors build reflection prompt pages using a section-based visual builder. Students complete and submit responses directly on the page via the `[reflection_form]` shortcode. No external dependencies — zero ACF, zero page-builder plugins required.
+The plugin was built with the intention of making it easier for both students and instructors to use Wordpress as an ePortfolio platform.
+
+Instructors builds activity and reflection prompt pages using a section-based visual builder. Students complete and submit responses directly on the page via easy-to-use forms.
+
+
 
 ---
 
