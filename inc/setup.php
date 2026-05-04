@@ -146,7 +146,7 @@ function reflsub_setup_create_reflection_child( $parent_id, $title ) {
 
     if ( $post_id && ! is_wp_error( $post_id ) ) {
         update_post_meta( $post_id, 'is_reflection_page',  1 );
-        update_post_meta( $post_id, 'submission_privacy',  'pending' );
+        update_post_meta( $post_id, 'submission_privacy',  'publish' );
         update_post_meta( $post_id, 'allow_resubmission',  0 );
 
         $sections = wp_json_encode( array(

@@ -20,6 +20,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 
+// ── Prompt label styles on single posts ───────────────────────────────────────
+add_action( 'wp_head', function () {
+    if ( ! is_singular( 'post' ) ) return;
+    ?>
+    <style>
+    .reflsub-prompt-label {
+        font-style: italic;
+        font-size: 0.9em;
+        color: #64748b;
+        border-left: 3px solid #ace7d4;
+        padding-left: 10px;
+        margin-bottom: 2px;
+    }
+    </style>
+    <?php
+} );
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: sanitize an embed code — allows <iframe> only, strips everything else
 // ─────────────────────────────────────────────────────────────────────────────
@@ -232,45 +250,40 @@ function reflsub_handle_reflection_submission() {
 
     if ( $prompt_1 && $response_1 ) {
         $content_parts[] = sprintf(
-            '<h3>%s</h3><p>%s</p>',
-            esc_html( $prompt_1 ),
-            nl2br( esc_html( $response_1 ) )
+            "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
+            esc_html( $prompt_1 ), nl2br( esc_html( $response_1 ) )
         );
     } elseif ( $response_1 ) {
-        $content_parts[] = '<p>' . nl2br( esc_html( $response_1 ) ) . '</p>';
+        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response_1 ) ) );
     }
 
     if ( $prompt_2 && $response_2 ) {
         $content_parts[] = sprintf(
-            '<h3>%s</h3><p>%s</p>',
-            esc_html( $prompt_2 ),
-            nl2br( esc_html( $response_2 ) )
+            "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
+            esc_html( $prompt_2 ), nl2br( esc_html( $response_2 ) )
         );
     } elseif ( $response_2 ) {
-        $content_parts[] = '<p>' . nl2br( esc_html( $response_2 ) ) . '</p>';
+        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response_2 ) ) );
     }
 
     if ( $prompt_3 && $response_3 ) {
         $content_parts[] = sprintf(
-            '<h3>%s</h3><p>%s</p>',
-            esc_html( $prompt_3 ),
-            nl2br( esc_html( $response_3 ) )
+            "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
+            esc_html( $prompt_3 ), nl2br( esc_html( $response_3 ) )
         );
     } elseif ( $response_3 ) {
-        $content_parts[] = '<p>' . nl2br( esc_html( $response_3 ) ) . '</p>';
+        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response_3 ) ) );
     }
 
-    // Video embed appended to content
     if ( $video_url ) {
-        $embed = wp_oembed_get( $video_url );
-        $content_parts[] = $embed
-            ? $embed
-            : '<p><a href="' . esc_url( $video_url ) . '">' . esc_html( $video_url ) . '</a></p>';
+        $content_parts[] = sprintf(
+            "<!-- wp:embed {\"url\":\"%s\",\"type\":\"video\",\"responsive\":true} -->\n<figure class=\"wp-block-embed is-type-video\"><div class=\"wp-block-embed__wrapper\">\n%s\n</div></figure>\n<!-- /wp:embed -->",
+            esc_url( $video_url ), esc_url( $video_url )
+        );
     }
 
-    // Raw embed code (Kaltura, iFrame, etc.) appended to content
     if ( $embed_code ) {
-        $content_parts[] = $embed_code;
+        $content_parts[] = sprintf( "<!-- wp:html -->\n%s\n<!-- /wp:html -->", $embed_code );
     }
 
     $post_content = implode( "\n\n", $content_parts );
@@ -386,8 +399,11 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 $has_content = true;
                 $label = $sec['label'] ?? '';
                 $ordered_parts[ $i ] = $label
-                    ? sprintf( '<h3>%s</h3><p>%s</p>', esc_html( $label ), nl2br( esc_html( $response ) ) )
-                    : '<p>' . nl2br( esc_html( $response ) ) . '</p>';
+                    ? sprintf(
+                        "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
+                        esc_html( $label ), nl2br( esc_html( $response ) )
+                    )
+                    : sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response ) ) );
             }
         }
 
@@ -406,8 +422,11 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                     return '<li>' . esc_html( $opt ) . '</li>';
                 }, $selected ) );
                 $ordered_parts[ $i ] = $question
-                    ? '<h4>' . esc_html( $question ) . '</h4><ul>' . $items_html . '</ul>'
-                    : '<ul>' . $items_html . '</ul>';
+                    ? sprintf(
+                        "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:list -->\n<ul class=\"wp-block-list\">%s</ul>\n<!-- /wp:list -->",
+                        esc_html( $question ), $items_html
+                    )
+                    : sprintf( "<!-- wp:list -->\n<ul class=\"wp-block-list\">%s</ul>\n<!-- /wp:list -->", $items_html );
             }
         }
 
@@ -423,21 +442,21 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         if ( $type === 'video' ) {
             $url = esc_url_raw( trim( wp_unslash( $_POST['section_video'] ?? '' ) ) );
             if ( $url ) {
-                $has_content = true;
-                $video_meta  = $url;
-                $oembedded   = wp_oembed_get( $url );
-                $ordered_parts[ $i ] = $oembedded
-                    ? $oembedded
-                    : '<p><a href="' . esc_url( $url ) . '">' . esc_html( $url ) . '</a></p>';
+                $has_content         = true;
+                $video_meta          = $url;
+                $ordered_parts[ $i ] = sprintf(
+                    "<!-- wp:embed {\"url\":\"%s\",\"type\":\"video\",\"responsive\":true} -->\n<figure class=\"wp-block-embed is-type-video\"><div class=\"wp-block-embed__wrapper\">\n%s\n</div></figure>\n<!-- /wp:embed -->",
+                    esc_url( $url ), esc_url( $url )
+                );
             }
         }
 
         if ( $type === 'embed' ) {
             $code = reflsub_sanitize_embed_code( wp_unslash( $_POST['section_embed'] ?? '' ) );
             if ( $code ) {
-                $has_content       = true;
-                $embed_meta        = $code;
-                $ordered_parts[ $i ] = $code;
+                $has_content         = true;
+                $embed_meta          = $code;
+                $ordered_parts[ $i ] = sprintf( "<!-- wp:html -->\n%s\n<!-- /wp:html -->", $code );
             }
         }
 
@@ -1371,10 +1390,10 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 </p>
                 <blockquote class="reflsub-rr-card-excerpt">
                     <?php
-                    // Strip prompt/question headings (<h3>, <h4>) so only the student's
-                    // own words appear in the excerpt.
+                    // Strip instructor prompt labels so only the student's words appear.
                     $rr_raw = get_the_content( null, false, $rr_post );
-                    $rr_raw = preg_replace( '/<h[34][^>]*>.*?<\/h[34]>/si', '', $rr_raw );
+                    $rr_raw = preg_replace( '/<p\s+class="reflsub-prompt-label"[^>]*>.*?<\/p>/si', '', $rr_raw );
+                    $rr_raw = preg_replace( '/<h[34][^>]*>.*?<\/h[34]>/si', '', $rr_raw ); // legacy posts
                     echo esc_html( wp_trim_words( wp_strip_all_tags( $rr_raw ), 50, '…' ) );
                     ?>
                 </blockquote>
