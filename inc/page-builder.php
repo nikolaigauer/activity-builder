@@ -370,12 +370,13 @@ function reflsub_render_page_builder() {
                             </div>
 
                             <div class="reflsub-field reflsub-field-check">
-                                <label>Resubmission</label>
+                                <label>Multiple Submissions</label>
                                 <label class="reflsub-toggle">
                                     <input type="checkbox" name="reflsub_allow_resub" value="1"
                                            <?php checked( $allow_resub, 1 ); ?>>
-                                    <span>Allow students to submit more than once</span>
+                                    <span>Students can submit to this form more than once</span>
                                 </label>
+                                <span class="reflsub-field-desc">Each submission creates a new post. Add an Entry Title section so students can name each entry.</span>
                             </div>
 
                             <div class="reflsub-field">
