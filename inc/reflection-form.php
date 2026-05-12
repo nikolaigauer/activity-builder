@@ -616,6 +616,15 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     // $auto_tags already contains page-level auto-tags + any student-submitted tags.
     wp_set_post_tags( $post_id, $auto_tags );
 
+    // Content-type taxonomy — tag the submission with the type configured on the activity page.
+    $ct_slug = get_post_meta( $page_id, '_reflsub_content_type_slug', true );
+    if ( $ct_slug && taxonomy_exists( 'content-type' ) ) {
+        $ct_term = get_term_by( 'slug', $ct_slug, 'content-type' );
+        if ( $ct_term && ! is_wp_error( $ct_term ) ) {
+            wp_set_object_terms( $post_id, $ct_term->term_id, 'content-type' );
+        }
+    }
+
     $redirect_arg = $edit_post_id ? 'reflection_updated' : 'reflection_submitted';
     wp_redirect( add_query_arg( $redirect_arg, '1', $redirect_base ) );
     exit;

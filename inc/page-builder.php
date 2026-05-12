@@ -213,14 +213,15 @@ function reflsub_render_page_builder() {
     $is_edit   = $edit_id > 0;
 
     // Load existing page data in edit mode
-    $page_title    = '';
-    $intro_text    = '';
-    $privacy       = 'publish';
-    $allow_resub   = 0;
-    $parent_id     = 0;
-    $sections_json = '';
-    $page_status   = 'publish'; // default for new pages
-    $auto_tags_val = '';
+    $page_title          = '';
+    $intro_text          = '';
+    $privacy             = 'publish';
+    $allow_resub         = 0;
+    $parent_id           = 0;
+    $sections_json       = '';
+    $page_status         = 'publish'; // default for new pages
+    $auto_tags_val       = '';
+    $content_type_slug   = '';
 
     if ( $is_edit ) {
         $page = get_post( $edit_id );
@@ -228,14 +229,15 @@ function reflsub_render_page_builder() {
             echo '<div class="wrap"><p>Page not found.</p></div>';
             return;
         }
-        $page_title    = $page->post_title;
-        $intro_text    = $page->post_excerpt;
-        $privacy       = get_post_meta( $edit_id, 'submission_privacy', true ) ?: 'publish';
-        $allow_resub   = (int) get_post_meta( $edit_id, 'allow_resubmission', true );
-        $parent_id     = (int) $page->post_parent;
-        $sections_json = get_post_meta( $edit_id, '_reflsub_sections', true ) ?: '';
-        $page_status   = $page->post_status;
-        $auto_tags_val = get_post_meta( $edit_id, '_reflsub_auto_tags', true ) ?: '';
+        $page_title          = $page->post_title;
+        $intro_text          = $page->post_excerpt;
+        $privacy             = get_post_meta( $edit_id, 'submission_privacy', true ) ?: 'publish';
+        $allow_resub         = (int) get_post_meta( $edit_id, 'allow_resubmission', true );
+        $parent_id           = (int) $page->post_parent;
+        $sections_json       = get_post_meta( $edit_id, '_reflsub_sections', true ) ?: '';
+        $page_status         = $page->post_status;
+        $auto_tags_val       = get_post_meta( $edit_id, '_reflsub_auto_tags', true ) ?: '';
+        $content_type_slug   = get_post_meta( $edit_id, '_reflsub_content_type_slug', true ) ?: '';
     }
 
     // Top-level pages only for parent selector (exclude self in edit mode)
@@ -374,6 +376,32 @@ function reflsub_render_page_builder() {
                                            <?php checked( $allow_resub, 1 ); ?>>
                                     <span>Allow students to submit more than once</span>
                                 </label>
+                            </div>
+
+                            <div class="reflsub-field">
+                                <label for="reflsub-content-type">
+                                    Content Type <span class="reflsub-optional">optional</span>
+                                </label>
+                                <?php
+                                $ct_terms = taxonomy_exists( 'content-type' )
+                                    ? get_terms( array( 'taxonomy' => 'content-type', 'hide_empty' => false ) )
+                                    : array();
+                                if ( ! empty( $ct_terms ) && ! is_wp_error( $ct_terms ) ) : ?>
+                                <select id="reflsub-content-type" name="reflsub_content_type_slug">
+                                    <option value="">— None —</option>
+                                    <?php foreach ( $ct_terms as $ct ) : ?>
+                                    <option value="<?php echo esc_attr( $ct->slug ); ?>"
+                                            <?php selected( $content_type_slug, $ct->slug ); ?>>
+                                        <?php echo esc_html( $ct->name ); ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php else : ?>
+                                <input type="text" id="reflsub-content-type" name="reflsub_content_type_slug"
+                                       placeholder="e.g. reflection"
+                                       value="<?php echo esc_attr( $content_type_slug ); ?>">
+                                <?php endif; ?>
+                                <span class="reflsub-field-desc">Submissions are tagged with this content type in the student archive. Create terms under Posts → Content Types.</span>
                             </div>
 
                         </div><!-- /.reflsub-col-sidebar -->
@@ -1115,6 +1143,8 @@ function reflsub_save_reflection_page() {
         array_map( 'sanitize_text_field', array_map( 'trim', explode( ',', $auto_tags_raw ) ) )
     ) ) );
 
+    $content_type_slug = sanitize_key( $_POST['reflsub_content_type_slug'] ?? '' );
+
     if ( ! in_array( $privacy, array( 'publish', 'private', 'pending' ), true ) ) {
         $privacy = 'publish';
     }
@@ -1209,11 +1239,12 @@ function reflsub_save_reflection_page() {
     $saved_id = $result;
 
     // Save meta
-    update_post_meta( $saved_id, '_reflsub_sections',  wp_json_encode( $sections ) );
-    update_post_meta( $saved_id, 'is_reflection_page', 1 );
-    update_post_meta( $saved_id, 'submission_privacy',  $privacy );
-    update_post_meta( $saved_id, 'allow_resubmission',  $allow_resub );
-    update_post_meta( $saved_id, '_reflsub_auto_tags',  $auto_tags_val );
+    update_post_meta( $saved_id, '_reflsub_sections',        wp_json_encode( $sections ) );
+    update_post_meta( $saved_id, 'is_reflection_page',       1 );
+    update_post_meta( $saved_id, 'submission_privacy',       $privacy );
+    update_post_meta( $saved_id, 'allow_resubmission',       $allow_resub );
+    update_post_meta( $saved_id, '_reflsub_auto_tags',       $auto_tags_val );
+    update_post_meta( $saved_id, '_reflsub_content_type_slug', $content_type_slug );
 
     $saved_flag = $is_new ? 'created' : 'updated';
     wp_redirect( admin_url( 'admin.php?page=activity-builder&reflsub_saved=' . $saved_flag ) );
