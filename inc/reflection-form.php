@@ -388,9 +388,19 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     $mcq_meta       = array(); // i => sanitized selected options array
     $video_meta     = '';
     $embed_meta     = '';
+    $entry_title    = '';        // from entry_title section, used as post title if present
 
     foreach ( $sections as $i => $sec ) {
         $type = $sec['type'] ?? '';
+
+        if ( $type === 'entry_title' ) {
+            $val = sanitize_text_field( wp_unslash( $_POST[ 'section_entry_title_' . $i ] ?? '' ) );
+            if ( $val !== '' ) {
+                $entry_title = $val;
+                $has_content = true;
+            }
+            continue;
+        }
 
         if ( $type === 'prompt' ) {
             $response = sanitize_textarea_field( wp_unslash( $_POST[ 'section_response_' . $i ] ?? '' ) );
@@ -514,10 +524,20 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     $text_parts   = array_filter( $ordered_parts, function( $p ) { return $p !== null; } );
     $post_content = implode( "\n\n", $text_parts );
 
+    // Determine post title: student-provided > date fallback (multi-submit) > page title
+    if ( $entry_title ) {
+        $post_title = $entry_title;
+    } elseif ( (int) get_post_meta( $page_id, 'allow_resubmission', true ) ) {
+        $post_title = get_the_title( $page_id ) . ' — ' . date_i18n( 'F j, Y' );
+    } else {
+        $post_title = get_the_title( $page_id );
+    }
+
     // Create new post or update existing
     if ( $edit_post_id ) {
         $result = wp_update_post( array(
             'ID'           => $edit_post_id,
+            'post_title'   => $post_title,
             'post_content' => $post_content,
         ), true );
         if ( is_wp_error( $result ) ) {
@@ -531,7 +551,7 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
             ? $privacy : 'publish';
 
         $post_id = wp_insert_post( array(
-            'post_title'   => get_the_title( $page_id ),
+            'post_title'   => $post_title,
             'post_content' => $post_content,
             'post_status'  => $post_status,
             'post_author'  => $user_id,
@@ -1094,7 +1114,9 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
     if ( $edit_post_id ) {
         foreach ( $sections as $i => $sec ) {
             $t = $sec['type'] ?? '';
-            if ( $t === 'prompt' ) {
+            if ( $t === 'entry_title' ) {
+                $prefill[ $i ] = get_the_title( $edit_post_id );
+            } elseif ( $t === 'prompt' ) {
                 $prefill[ $i ] = get_post_meta( $edit_post_id, '_reflsub_response_' . $i, true );
             } elseif ( $t === 'mcq' ) {
                 $raw           = get_post_meta( $edit_post_id, '_reflsub_mcq_' . $i, true );
@@ -1157,7 +1179,25 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 $type = $sec['type'] ?? '';
             ?>
 
-            <?php if ( $type === 'prompt' ) :
+            <?php if ( $type === 'entry_title' ) :
+                $label    = $sec['label'] ?: 'Entry Title';
+                $required = ! empty( $sec['required'] );
+                $field_id = 'section_entry_title_' . $i;
+            ?>
+            <div class="reflection-field">
+                <label for="<?php echo esc_attr( $field_id ); ?>">
+                    <?php echo esc_html( $label ); ?>
+                    <?php if ( $required ) : ?><span style="color:#d63638;" aria-label="required">*</span><?php endif; ?>
+                </label>
+                <input type="text"
+                       id="<?php echo esc_attr( $field_id ); ?>"
+                       name="<?php echo esc_attr( $field_id ); ?>"
+                       value="<?php echo esc_attr( $prefill[ $i ] ?? '' ); ?>"
+                       placeholder="Give your entry a title…"
+                       <?php if ( $required ) : ?>required<?php endif; ?>>
+            </div>
+
+            <?php elseif ( $type === 'prompt' ) :
                 $label      = $sec['label'] ?? '';
                 $word_limit = intval( $sec['word_limit'] ?? 0 );
                 $required   = ! empty( $sec['required'] );

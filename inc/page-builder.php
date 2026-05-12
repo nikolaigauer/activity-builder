@@ -417,6 +417,7 @@ function reflsub_render_page_builder() {
                     <div id="reflsub-sections"></div>
                     <div class="reflsub-add-palette">
                         <span class="reflsub-add-label">+ Add section</span>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('entry_title')">Entry Title</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('prompt')">Prompt</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('mcq')">Multiple Choice</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('image')">Image</button>
@@ -768,6 +769,7 @@ function reflsub_render_page_builder() {
 
         // Section type labels
         var LABELS = {
+            entry_title: 'Entry Title',
             prompt: 'Prompt (Text Response)',
             mcq:    'Multiple Choice Question',
             image:  'Image Upload',
@@ -864,6 +866,14 @@ function reflsub_render_page_builder() {
         }
 
         function buildBody(type, data, id) {
+            if (type === 'entry_title') {
+                var reqChecked = data.required ? ' checked' : '';
+                return '<label>Label / Instruction <span style="font-weight:normal;font-size:.9em;">(shown above the title field)</span></label>' +
+                    '<input type="text" class="reflsub-et-label" placeholder="e.g. Give your entry a title" value="' + esc(data.label || '') + '" style="width:100%;">' +
+                    '<div class="reflsub-section-meta" style="margin-top:10px;"><label><input type="checkbox" class="reflsub-et-required"' + reqChecked + '> Required</label></div>' +
+                    '<p class="reflsub-flag-note" style="margin-top:10px;">The student\'s answer becomes the post title. If left blank, the title falls back to the activity page name + today\'s date.</p>';
+            }
+
             if (type === 'prompt') {
                 var checked = data.required ? ' checked' : '';
                 return '<label>Prompt / Question</label>' +
@@ -975,6 +985,11 @@ function reflsub_render_page_builder() {
 
                 if (type === 'pdf') {
                     sec.required = el.querySelector('.reflsub-pdf-required').checked;
+                }
+
+                if (type === 'entry_title') {
+                    sec.label    = el.querySelector('.reflsub-et-label').value.trim();
+                    sec.required = el.querySelector('.reflsub-et-required').checked;
                 }
 
                 if (type === 're_reflect') {
@@ -1165,6 +1180,10 @@ function reflsub_save_reflection_page() {
                 $clean   = array( 'type' => $type );
 
                 switch ( $type ) {
+                    case 'entry_title':
+                        $clean['label']    = sanitize_text_field( $sec['label'] ?? '' );
+                        $clean['required'] = ! empty( $sec['required'] );
+                        break;
                     case 'prompt':
                         $clean['label']      = sanitize_textarea_field( $sec['label'] ?? '' );
                         $clean['word_limit'] = max( 0, intval( $sec['word_limit'] ?? 0 ) );
