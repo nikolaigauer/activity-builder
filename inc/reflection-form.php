@@ -147,6 +147,102 @@ function reflsub_build_image_block( array $ids ) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper: render one server-side student block (used in edit mode to replay
+// previously-saved blocks so the student can edit instead of starting over).
+// The markup matches the JS-built block exactly so client handlers (Remove
+// via delegation, drop-zone init, existing-image removal) all work uniformly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function reflsub_render_student_block( $block_id, $state ) {
+    $type   = $state['type'] ?? '';
+    $labels = array(
+        'text'  => 'Paragraph',
+        'image' => 'Image(s)',
+        'video' => 'Video URL',
+        'embed' => 'Embed',
+        'pdf'   => 'PDF / File',
+    );
+    $label = $labels[ $type ] ?? $type;
+
+    ob_start();
+    ?>
+    <div class="reflsub-student-block" data-type="<?php echo esc_attr( $type ); ?>" data-id="<?php echo (int) $block_id; ?>">
+        <div class="reflsub-student-block-header">
+            <span class="reflsub-student-block-label"><?php echo esc_html( $label ); ?></span>
+            <button type="button" class="reflsub-student-block-remove" aria-label="Remove this block">&times; Remove</button>
+        </div>
+        <?php if ( $type === 'text' ) : ?>
+            <textarea rows="5" class="reflsub-student-text"
+                      placeholder="Write your paragraph…  (Leave a blank line between paragraphs.)"><?php echo esc_textarea( $state['content'] ?? '' ); ?></textarea>
+        <?php elseif ( $type === 'video' ) : ?>
+            <input type="url" class="reflsub-student-video"
+                   value="<?php echo esc_attr( $state['content'] ?? '' ); ?>"
+                   placeholder="https://www.youtube.com/watch?v=…">
+            <p class="reflection-hint">Paste a YouTube or Vimeo URL — it will embed in your post.</p>
+        <?php elseif ( $type === 'embed' ) : ?>
+            <textarea rows="4" class="reflsub-student-embed"
+                      placeholder="Paste your &lt;iframe&gt; embed code here…"><?php echo esc_textarea( $state['content'] ?? '' ); ?></textarea>
+            <p class="reflection-hint">Only <code>&lt;iframe&gt;</code> tags are accepted; other HTML will be stripped.</p>
+        <?php elseif ( $type === 'image' ) :
+            $ids = array_values( array_filter( array_map( 'intval', (array) ( $state['ids'] ?? array() ) ) ) );
+        ?>
+            <?php if ( ! empty( $ids ) ) : ?>
+            <div class="reflsub-existing-images">
+                <p class="reflsub-existing-label">Currently uploaded — click &times; to remove:</p>
+                <div class="reflsub-existing-thumbs">
+                    <?php foreach ( $ids as $att_id ) :
+                        $thumb = wp_get_attachment_image_url( $att_id, 'thumbnail' );
+                        $alt   = get_the_title( $att_id );
+                        if ( ! $thumb ) continue;
+                    ?>
+                    <div class="reflsub-existing-wrap" data-img-id="<?php echo esc_attr( $att_id ); ?>">
+                        <img src="<?php echo esc_url( $thumb ); ?>" alt="<?php echo esc_attr( $alt ); ?>">
+                        <button type="button" class="reflsub-existing-remove" aria-label="Remove <?php echo esc_attr( $alt ); ?>">&times;</button>
+                        <input type="hidden"
+                               name="reflsub_student_image_<?php echo (int) $block_id; ?>_keep[]"
+                               value="<?php echo esc_attr( $att_id ); ?>"
+                               id="reflsub-keep-<?php echo esc_attr( $att_id ); ?>">
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+            <div class="reflsub-drop-zone">
+                <div class="reflsub-drop-inner">
+                    <span class="reflsub-drop-icon" aria-hidden="true">&#x1F5BC;&#xFE0F;</span>
+                    <p class="reflsub-drop-label">Drag &amp; drop <?php echo ! empty( $ids ) ? 'more ' : ''; ?>images here</p>
+                    <p class="reflsub-drop-sub">or <label class="reflsub-drop-browse" for="reflsub-student-image-<?php echo (int) $block_id; ?>">choose files</label></p>
+                </div>
+                <input type="file" id="reflsub-student-image-<?php echo (int) $block_id; ?>"
+                       name="reflsub_student_image_<?php echo (int) $block_id; ?>[]"
+                       accept="image/jpeg,image/png,image/gif,image/webp" multiple
+                       class="reflsub-drop-input" aria-label="Upload images">
+                <div class="reflsub-drop-previews"></div>
+            </div>
+            <p class="reflection-hint">JPEG, PNG, GIF, WebP — max 15 MB per file. Multiple images display as a gallery.</p>
+        <?php elseif ( $type === 'pdf' ) :
+            $att_id    = intval( $state['id'] ?? 0 );
+            $pdf_url   = $att_id ? wp_get_attachment_url( $att_id ) : '';
+            $pdf_title = ( $att_id && $pdf_url ) ? ( get_the_title( $att_id ) ?: basename( $pdf_url ) ) : '';
+        ?>
+            <?php if ( $att_id && $pdf_url ) : ?>
+            <p class="reflection-hint" style="margin-bottom:.5em;">
+                Currently attached:
+                <a href="<?php echo esc_url( $pdf_url ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $pdf_title ); ?></a>
+                — leave the picker empty to keep it, or choose a new file to replace it.
+            </p>
+            <input type="hidden" name="reflsub_student_pdf_<?php echo (int) $block_id; ?>_keep" value="<?php echo esc_attr( $att_id ); ?>">
+            <?php endif; ?>
+            <input type="file" name="reflsub_student_pdf_<?php echo (int) $block_id; ?>" accept=".pdf,application/pdf">
+            <p class="reflection-hint">PDF only. Max 15 MB.</p>
+        <?php endif; ?>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper: check if the current user has already submitted for a page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -533,14 +629,16 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
             }
             if ( $sb_type === 'image' && $sb_id ) {
                 $names = $_FILES[ 'reflsub_student_image_' . $sb_id ]['name'] ?? array();
-                if ( is_array( $names ) && ! empty( $names[0] ) ) {
+                $kept  = $_POST[ 'reflsub_student_image_' . $sb_id . '_keep' ] ?? array();
+                if ( ( is_array( $names ) && ! empty( $names[0] ) ) || ! empty( $kept ) ) {
                     $has_content = true;
                     break;
                 }
             }
             if ( $sb_type === 'pdf' && $sb_id ) {
                 $pdf_name = $_FILES[ 'reflsub_student_pdf_' . $sb_id ]['name'] ?? '';
-                if ( $pdf_name !== '' ) {
+                $kept     = intval( $_POST[ 'reflsub_student_pdf_' . $sb_id . '_keep' ] ?? 0 );
+                if ( $pdf_name !== '' || $kept > 0 ) {
                     $has_content = true;
                     break;
                 }
@@ -661,6 +759,8 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     // ── Student-added blocks → append after instructor sections ───────────
     // Sort keys start at 100000 so these always land after any instructor
     // section keys (which use small integers based on $sections array index).
+    // $student_state mirrors the rendered blocks so edit mode can replay them.
+    $student_state = array();
     foreach ( $student_blocks as $sb_idx => $sb ) {
         $sb_type = $sb['type'] ?? '';
         $sb_id   = intval( $sb['id'] ?? 0 );
@@ -681,6 +781,7 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
             }
             if ( $para_html ) {
                 $ordered_parts[ $sort_k ] = implode( "\n\n", $para_html );
+                $student_state[] = array( 'type' => 'text', 'content' => $text );
             }
         } elseif ( $sb_type === 'video' ) {
             $url = esc_url_raw( trim( wp_unslash( $sb['content'] ?? '' ) ) );
@@ -689,33 +790,74 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 "<!-- wp:embed {\"url\":\"%s\",\"type\":\"video\",\"responsive\":true} -->\n<figure class=\"wp-block-embed is-type-video\"><div class=\"wp-block-embed__wrapper\">\n%s\n</div></figure>\n<!-- /wp:embed -->",
                 esc_url( $url ), esc_url( $url )
             );
+            $student_state[] = array( 'type' => 'video', 'content' => $url );
         } elseif ( $sb_type === 'embed' ) {
-            $code = reflsub_sanitize_embed_code( wp_unslash( $sb['content'] ?? '' ) );
+            $raw  = wp_unslash( $sb['content'] ?? '' );
+            $code = reflsub_sanitize_embed_code( $raw );
             if ( ! $code ) continue;
             $ordered_parts[ $sort_k ] = sprintf( "<!-- wp:html -->\n%s\n<!-- /wp:html -->", $code );
+            // Store the *sanitized* code so edit-mode round-trip can't re-introduce
+            // tags the sanitizer would have stripped.
+            $student_state[] = array( 'type' => 'embed', 'content' => $code );
         } elseif ( $sb_type === 'image' && $sb_id ) {
             $field = 'reflsub_student_image_' . $sb_id;
-            $names = $_FILES[ $field ]['name'] ?? array();
-            if ( ! is_array( $names ) || empty( $names[0] ) ) continue;
-            $img_ids = reflsub_upload_multiple_images( $field, $post_id );
-            if ( $img_ids ) {
-                $img_block = reflsub_build_image_block( $img_ids );
+
+            // Existing attachments the student chose to keep (edit mode only).
+            $kept_ids = array();
+            $keep_raw = $_POST[ $field . '_keep' ] ?? array();
+            if ( is_array( $keep_raw ) ) {
+                foreach ( $keep_raw as $kid ) {
+                    $kid = intval( $kid );
+                    $att = get_post( $kid );
+                    if ( $att && $att->post_type === 'attachment'
+                         && (int) $att->post_parent === $post_id ) {
+                        $kept_ids[] = $kid;
+                    }
+                }
+            }
+
+            // New uploads in this block, if any.
+            $new_ids = array();
+            $names   = $_FILES[ $field ]['name'] ?? array();
+            if ( is_array( $names ) && ! empty( $names[0] ) ) {
+                $new_ids = reflsub_upload_multiple_images( $field, $post_id );
+            }
+
+            $all_ids = array_merge( $kept_ids, $new_ids );
+            if ( $all_ids ) {
+                $img_block = reflsub_build_image_block( $all_ids );
                 if ( $img_block ) {
                     $ordered_parts[ $sort_k ] = $img_block;
                 }
+                $student_state[] = array( 'type' => 'image', 'ids' => $all_ids );
             }
         } elseif ( $sb_type === 'pdf' && $sb_id ) {
-            $field = 'reflsub_student_pdf_' . $sb_id;
-            if ( empty( $_FILES[ $field ]['name'] )
-                 || ( $_FILES[ $field ]['error'] ?? UPLOAD_ERR_NO_FILE ) !== UPLOAD_ERR_OK ) {
-                continue;
+            $field   = 'reflsub_student_pdf_' . $sb_id;
+            $pdf_aid = 0;
+
+            // Try a new upload first; fall back to the kept PDF if none was given.
+            if ( ! empty( $_FILES[ $field ]['name'] )
+                 && ( $_FILES[ $field ]['error'] ?? UPLOAD_ERR_NO_FILE ) === UPLOAD_ERR_OK
+                 && ( $_FILES[ $field ]['size'] ?? 0 ) <= 15 * 1024 * 1024 ) {
+                require_once ABSPATH . 'wp-admin/includes/image.php';
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+                require_once ABSPATH . 'wp-admin/includes/media.php';
+                $uploaded = media_handle_upload( $field, $post_id );
+                if ( ! is_wp_error( $uploaded ) ) {
+                    $pdf_aid = $uploaded;
+                }
+            } else {
+                $kept = intval( $_POST[ $field . '_keep' ] ?? 0 );
+                if ( $kept ) {
+                    $att = get_post( $kept );
+                    if ( $att && $att->post_type === 'attachment'
+                         && (int) $att->post_parent === $post_id ) {
+                        $pdf_aid = $kept;
+                    }
+                }
             }
-            if ( ( $_FILES[ $field ]['size'] ?? 0 ) > 15 * 1024 * 1024 ) continue;
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-            require_once ABSPATH . 'wp-admin/includes/media.php';
-            $pdf_aid = media_handle_upload( $field, $post_id );
-            if ( ! is_wp_error( $pdf_aid ) ) {
+
+            if ( $pdf_aid ) {
                 $pdf_url   = wp_get_attachment_url( $pdf_aid );
                 $pdf_title = get_the_title( $pdf_aid ) ?: basename( $pdf_url );
                 $ordered_parts[ $sort_k ] = sprintf(
@@ -726,8 +868,16 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                     esc_html( $pdf_title ),
                     esc_url( $pdf_url )
                 );
+                $student_state[] = array( 'type' => 'pdf', 'id' => $pdf_aid );
             }
         }
+    }
+
+    // Persist student-block state so edit mode can replay the blocks.
+    if ( $student_state ) {
+        update_post_meta( $post_id, '_reflsub_student_blocks', wp_json_encode( $student_state ) );
+    } else {
+        delete_post_meta( $post_id, '_reflsub_student_blocks' );
     }
 
     // Reassemble all parts in section order now that uploads are resolved
@@ -1564,8 +1714,27 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             <?php endforeach; ?>
 
             <!-- Student-added blocks palette: students dynamically add paragraphs,
-                 images, video, embed, or PDF as needed. Order is preserved. -->
-            <div id="reflsub-student-blocks"></div>
+                 images, video, embed, or PDF as needed. Order is preserved.
+                 In edit mode, previously-saved student blocks are server-rendered
+                 here so the student can update rather than start from scratch. -->
+            <?php
+            $existing_state = array();
+            if ( $edit_post_id ) {
+                $state_raw = get_post_meta( $edit_post_id, '_reflsub_student_blocks', true );
+                if ( $state_raw ) {
+                    $decoded = json_decode( $state_raw, true );
+                    if ( is_array( $decoded ) ) {
+                        $existing_state = $decoded;
+                    }
+                }
+            }
+            $next_student_id = count( $existing_state ) + 1;
+            ?>
+            <div id="reflsub-student-blocks" data-next-id="<?php echo (int) $next_student_id; ?>">
+                <?php foreach ( $existing_state as $b_idx => $b_state ) {
+                    echo reflsub_render_student_block( $b_idx + 1, $b_state );
+                } ?>
+            </div>
             <div class="reflsub-student-palette">
                 <span class="reflsub-student-palette-label">+ Add</span>
                 <button type="button" data-block-type="text"  class="reflsub-student-add-btn">Paragraph</button>
@@ -1932,7 +2101,12 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
 
         // ── Drag-and-drop image zones ──────────────────────────────────────────
-        document.querySelectorAll('.reflsub-drop-zone').forEach(function(zone) {
+        // Exposed globally so dynamically-injected student image blocks can wire
+        // up their own drop zones via window.reflsubSetupDropZone(zone).
+        window.reflsubSetupDropZone = function(zone) {
+            if (zone.dataset.reflsubInitialised === '1') return;
+            zone.dataset.reflsubInitialised = '1';
+
             var input         = zone.querySelector('.reflsub-drop-input');
             var previews      = zone.querySelector('.reflsub-drop-previews');
             var acceptedFiles = []; // accumulates files across multiple drops/selects
@@ -2047,6 +2221,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                     addFiles(e.dataTransfer.files);
                 }
             });
+        };
+
+        // Initial scan: bind any pre-rendered drop zones.
+        document.querySelectorAll('.reflsub-drop-zone').forEach(function(zone) {
+            window.reflsubSetupDropZone(zone);
         });
 
         // ── Existing-image removal (edit mode) ────────────────────────────────
@@ -2069,12 +2248,14 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
     // ── Student-added blocks palette ───────────────────────────────────────
     (function() {
-        var nextId    = 0;
         var container = document.getElementById('reflsub-student-blocks');
         var palette   = document.querySelector('.reflsub-student-palette');
         var hidden    = document.getElementById('reflsub-student-blocks-data');
         var form      = document.querySelector('.reflection-form');
         if (!container || !palette || !hidden || !form) return;
+
+        // Seed from data-next-id so dynamic IDs don't collide with server-rendered blocks.
+        var nextId = parseInt(container.dataset.nextId, 10) || 1;
 
         var LABELS = {
             text:  'Paragraph',
@@ -2085,8 +2266,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         };
 
         function buildBlock(type) {
-            nextId++;
-            var id    = nextId;
+            var id    = nextId++;
             var block = document.createElement('div');
             block.className    = 'reflsub-student-block';
             block.dataset.type = type;
@@ -2105,9 +2285,20 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                      + 'placeholder="Paste your &lt;iframe&gt; embed code here — Kaltura, YouTube, Vimeo, etc."></textarea>'
                      + '<p class="reflection-hint">Only <code>&lt;iframe&gt;</code> tags are accepted; other HTML will be stripped.</p>';
             } else if (type === 'image') {
-                body = '<input type="file" name="reflsub_student_image_' + id + '[]" '
-                     + 'accept="image/jpeg,image/png,image/gif,image/webp" multiple>'
-                     + '<p class="reflection-hint">JPEG, PNG, GIF, WebP — max 15 MB per file. Select multiple to add a gallery.</p>';
+                body =
+                    '<div class="reflsub-drop-zone">'
+                        + '<div class="reflsub-drop-inner">'
+                            + '<span class="reflsub-drop-icon" aria-hidden="true">🖼️</span>'
+                            + '<p class="reflsub-drop-label">Drag &amp; drop images here</p>'
+                            + '<p class="reflsub-drop-sub">or <label class="reflsub-drop-browse" for="reflsub-student-image-' + id + '">choose files</label></p>'
+                        + '</div>'
+                        + '<input type="file" id="reflsub-student-image-' + id + '" '
+                        + 'name="reflsub_student_image_' + id + '[]" '
+                        + 'accept="image/jpeg,image/png,image/gif,image/webp" multiple '
+                        + 'class="reflsub-drop-input" aria-label="Upload images">'
+                        + '<div class="reflsub-drop-previews"></div>'
+                    + '</div>'
+                    + '<p class="reflection-hint">JPEG, PNG, GIF, WebP — max 15 MB per file. Multiple images display as a gallery.</p>';
             } else if (type === 'pdf') {
                 body = '<input type="file" name="reflsub_student_pdf_' + id + '" '
                      + 'accept=".pdf,application/pdf">'
@@ -2120,17 +2311,30 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                     '<button type="button" class="reflsub-student-block-remove" aria-label="Remove this block">&times; Remove</button>' +
                 '</div>' + body;
 
-            block.querySelector('.reflsub-student-block-remove')
-                 .addEventListener('click', function() { block.remove(); });
+            // Remove handler is wired via event delegation on the container below,
+            // so it works for both JS-built and server-rendered (edit-mode) blocks.
 
             return block;
         }
+
+        // Delegated Remove-button handler — covers server-rendered blocks too.
+        container.addEventListener('click', function(e) {
+            var btn = e.target.closest('.reflsub-student-block-remove');
+            if (!btn || !container.contains(btn)) return;
+            var block = btn.closest('.reflsub-student-block');
+            if (block) block.remove();
+        });
 
         palette.querySelectorAll('.reflsub-student-add-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var block = buildBlock(btn.dataset.blockType);
                 container.appendChild(block);
-                var first = block.querySelector('textarea, input[type="url"], input[type="file"]');
+                // Wire up the drag-drop zone if this is an image block.
+                var zone = block.querySelector('.reflsub-drop-zone');
+                if (zone && typeof window.reflsubSetupDropZone === 'function') {
+                    window.reflsubSetupDropZone(zone);
+                }
+                var first = block.querySelector('textarea, input[type="url"]');
                 if (first) first.focus();
             });
         });
