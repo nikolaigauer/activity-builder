@@ -514,6 +514,40 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         }
     }
 
+    // ── Student-added blocks: parse JSON now so we can also factor them into
+    //    the has_content check; the actual block markup is appended further
+    //    down, after the post (and any attachment parents) is created.
+    $student_blocks_raw = wp_unslash( $_POST['reflsub_student_blocks_data'] ?? '' );
+    $student_blocks     = $student_blocks_raw ? json_decode( $student_blocks_raw, true ) : array();
+    if ( ! is_array( $student_blocks ) ) {
+        $student_blocks = array();
+    }
+    if ( ! $has_content && ! empty( $student_blocks ) ) {
+        foreach ( $student_blocks as $sb ) {
+            $sb_type = $sb['type'] ?? '';
+            $sb_id   = intval( $sb['id'] ?? 0 );
+            if ( in_array( $sb_type, array( 'text', 'video', 'embed' ), true )
+                 && trim( $sb['content'] ?? '' ) !== '' ) {
+                $has_content = true;
+                break;
+            }
+            if ( $sb_type === 'image' && $sb_id ) {
+                $names = $_FILES[ 'reflsub_student_image_' . $sb_id ]['name'] ?? array();
+                if ( is_array( $names ) && ! empty( $names[0] ) ) {
+                    $has_content = true;
+                    break;
+                }
+            }
+            if ( $sb_type === 'pdf' && $sb_id ) {
+                $pdf_name = $_FILES[ 'reflsub_student_pdf_' . $sb_id ]['name'] ?? '';
+                if ( $pdf_name !== '' ) {
+                    $has_content = true;
+                    break;
+                }
+            }
+        }
+    }
+
     if ( ! $has_content ) {
         wp_redirect( add_query_arg( 'reflection_error', 'empty', $redirect_base ) );
         exit;
@@ -621,6 +655,78 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 esc_html( $pdf_title ),
                 esc_url( $pdf_url )
             );
+        }
+    }
+
+    // ── Student-added blocks → append after instructor sections ───────────
+    // Sort keys start at 100000 so these always land after any instructor
+    // section keys (which use small integers based on $sections array index).
+    foreach ( $student_blocks as $sb_idx => $sb ) {
+        $sb_type = $sb['type'] ?? '';
+        $sb_id   = intval( $sb['id'] ?? 0 );
+        $sort_k  = 100000 + $sb_idx;
+
+        if ( $sb_type === 'text' ) {
+            $text = sanitize_textarea_field( wp_unslash( $sb['content'] ?? '' ) );
+            if ( $text === '' ) continue;
+            $paragraphs = preg_split( '/\n{2,}/', $text );
+            $para_html  = array();
+            foreach ( $paragraphs as $p ) {
+                $p = trim( $p );
+                if ( $p === '' ) continue;
+                $para_html[] = sprintf(
+                    "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
+                    nl2br( esc_html( $p ) )
+                );
+            }
+            if ( $para_html ) {
+                $ordered_parts[ $sort_k ] = implode( "\n\n", $para_html );
+            }
+        } elseif ( $sb_type === 'video' ) {
+            $url = esc_url_raw( trim( wp_unslash( $sb['content'] ?? '' ) ) );
+            if ( ! $url ) continue;
+            $ordered_parts[ $sort_k ] = sprintf(
+                "<!-- wp:embed {\"url\":\"%s\",\"type\":\"video\",\"responsive\":true} -->\n<figure class=\"wp-block-embed is-type-video\"><div class=\"wp-block-embed__wrapper\">\n%s\n</div></figure>\n<!-- /wp:embed -->",
+                esc_url( $url ), esc_url( $url )
+            );
+        } elseif ( $sb_type === 'embed' ) {
+            $code = reflsub_sanitize_embed_code( wp_unslash( $sb['content'] ?? '' ) );
+            if ( ! $code ) continue;
+            $ordered_parts[ $sort_k ] = sprintf( "<!-- wp:html -->\n%s\n<!-- /wp:html -->", $code );
+        } elseif ( $sb_type === 'image' && $sb_id ) {
+            $field = 'reflsub_student_image_' . $sb_id;
+            $names = $_FILES[ $field ]['name'] ?? array();
+            if ( ! is_array( $names ) || empty( $names[0] ) ) continue;
+            $img_ids = reflsub_upload_multiple_images( $field, $post_id );
+            if ( $img_ids ) {
+                $img_block = reflsub_build_image_block( $img_ids );
+                if ( $img_block ) {
+                    $ordered_parts[ $sort_k ] = $img_block;
+                }
+            }
+        } elseif ( $sb_type === 'pdf' && $sb_id ) {
+            $field = 'reflsub_student_pdf_' . $sb_id;
+            if ( empty( $_FILES[ $field ]['name'] )
+                 || ( $_FILES[ $field ]['error'] ?? UPLOAD_ERR_NO_FILE ) !== UPLOAD_ERR_OK ) {
+                continue;
+            }
+            if ( ( $_FILES[ $field ]['size'] ?? 0 ) > 15 * 1024 * 1024 ) continue;
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            $pdf_aid = media_handle_upload( $field, $post_id );
+            if ( ! is_wp_error( $pdf_aid ) ) {
+                $pdf_url   = wp_get_attachment_url( $pdf_aid );
+                $pdf_title = get_the_title( $pdf_aid ) ?: basename( $pdf_url );
+                $ordered_parts[ $sort_k ] = sprintf(
+                    '<!-- wp:file {"id":%d,"href":"%s"} --><div class="wp-block-file"><a href="%s">%s</a><a href="%s" class="wp-block-file__button" download>Download</a></div><!-- /wp:file -->',
+                    $pdf_aid,
+                    esc_url( $pdf_url ),
+                    esc_url( $pdf_url ),
+                    esc_html( $pdf_title ),
+                    esc_url( $pdf_url )
+                );
+            }
         }
     }
 
@@ -1098,16 +1204,9 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
     }
 
-    // Determine if the form needs multipart (image or PDF upload present)
-    $has_upload_section = false;
-    foreach ( $sections as $sec ) {
-        $t = $sec['type'] ?? '';
-        if ( $t === 'image' || $t === 'pdf' ) {
-            $has_upload_section = true;
-            break;
-        }
-    }
-    $form_enctype = $has_upload_section ? ' enctype="multipart/form-data"' : '';
+    // The student-added blocks palette can include image / PDF uploads, so the
+    // form is always multipart regardless of which instructor sections are present.
+    $form_enctype = ' enctype="multipart/form-data"';
 
     // ── Pre-fill values for edit mode ──────────────────────────────────────────
     $prefill = array();
@@ -1177,6 +1276,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
             <?php foreach ( $sections as $i => $sec ) :
                 $type = $sec['type'] ?? '';
+                // Media section types are no longer rendered as baked-in slots —
+                // students add them on demand via the "+ Add" palette below.
+                if ( in_array( $type, array( 'image', 'video', 'embed', 'pdf' ), true ) ) {
+                    continue;
+                }
             ?>
 
             <?php if ( $type === 'entry_title' ) :
@@ -1192,6 +1296,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <input type="text"
                        id="<?php echo esc_attr( $field_id ); ?>"
                        name="<?php echo esc_attr( $field_id ); ?>"
+                       class="reflsub-entry-title"
                        value="<?php echo esc_attr( $prefill[ $i ] ?? '' ); ?>"
                        placeholder="Give your entry a title…"
                        <?php if ( $required ) : ?>required<?php endif; ?>>
@@ -1458,6 +1563,19 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
             <?php endforeach; ?>
 
+            <!-- Student-added blocks palette: students dynamically add paragraphs,
+                 images, video, embed, or PDF as needed. Order is preserved. -->
+            <div id="reflsub-student-blocks"></div>
+            <div class="reflsub-student-palette">
+                <span class="reflsub-student-palette-label">+ Add</span>
+                <button type="button" data-block-type="text"  class="reflsub-student-add-btn">Paragraph</button>
+                <button type="button" data-block-type="image" class="reflsub-student-add-btn">Image(s)</button>
+                <button type="button" data-block-type="video" class="reflsub-student-add-btn">Video URL</button>
+                <button type="button" data-block-type="embed" class="reflsub-student-add-btn">Embed</button>
+                <button type="button" data-block-type="pdf"   class="reflsub-student-add-btn">PDF / File</button>
+            </div>
+            <input type="hidden" name="reflsub_student_blocks_data" id="reflsub-student-blocks-data" value="">
+
             <div class="reflection-submit">
                 <button type="submit" class="wp-element-button">
                     <?php echo $edit_post_id ? 'Update Submission' : 'Submit'; ?>
@@ -1481,6 +1599,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             line-height: 1.5;
         }
         .reflection-form textarea,
+        .reflection-form input[type="text"],
         .reflection-form input[type="url"] {
             width: 100%;
             padding: 0.75rem;
@@ -1492,10 +1611,16 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
         .reflection-form textarea { resize: vertical; }
         .reflection-form textarea:focus,
+        .reflection-form input[type="text"]:focus,
         .reflection-form input[type="url"]:focus {
             outline: none;
             border-color: #2271b1;
             box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.15);
+        }
+        .reflection-form input.reflsub-entry-title {
+            padding: 0.95rem 1rem;
+            font-size: 1.2rem;
+            font-weight: 500;
         }
         .reflection-form input[type="file"] { display: block; margin-bottom: 0.4rem; }
         .reflection-hint { margin: 0.3rem 0 0; font-size: 0.85rem; color: #646970; }
@@ -1638,6 +1763,65 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         .reflection-error     { background: #fce8e8; border-left: 4px solid #d63638; }
         .reflection-info      { background: #f0f6fc; border-left: 4px solid #2271b1; }
         .reflection-duplicate { background: #fff8e5; border-left: 4px solid #dba617; }
+
+        /* ── Student-added blocks palette ────────────────────────────── */
+        #reflsub-student-blocks { margin-top: 1rem; }
+        #reflsub-student-blocks:empty { margin-top: 0; }
+        .reflsub-student-block {
+            position: relative;
+            margin-bottom: 1.25rem;
+            padding: 1rem 1.25rem 1.1rem;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.04);
+        }
+        .reflsub-student-block-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 0.6rem;
+        }
+        .reflsub-student-block-label {
+            font-size: 0.8rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .06em;
+            color: #64748b;
+        }
+        .reflsub-student-block-remove {
+            background: none; border: none; padding: 2px 8px;
+            color: #d63638; font-size: 0.85rem; font-weight: 600;
+            cursor: pointer; border-radius: 4px;
+            transition: background .15s;
+        }
+        .reflsub-student-block-remove:hover { background: #fce8e8; }
+        .reflsub-student-block label {
+            margin-bottom: 0.35rem; font-size: 0.95rem;
+        }
+
+        .reflsub-student-palette {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+            padding: 14px 16px;
+            margin: 1.5rem 0 1rem;
+            background: #f8fafc;
+            border: 1.5px dashed #cbd5e1;
+            border-radius: 8px;
+        }
+        .reflsub-student-palette-label {
+            font-size: 0.85rem; font-weight: 600;
+            color: #64748b; margin-right: 4px;
+        }
+        .reflsub-student-add-btn {
+            border: 1.5px solid #cbd5e1;
+            background: #fff;
+            color: #334155;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .15s, color .15s, border-color .15s;
+        }
+        .reflsub-student-add-btn:hover {
+            background: #1b28b4; color: #fff; border-color: #1b28b4;
+        }
     </style>
 
     <script>
@@ -1881,6 +2065,102 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             });
         });
 
+    })();
+
+    // ── Student-added blocks palette ───────────────────────────────────────
+    (function() {
+        var nextId    = 0;
+        var container = document.getElementById('reflsub-student-blocks');
+        var palette   = document.querySelector('.reflsub-student-palette');
+        var hidden    = document.getElementById('reflsub-student-blocks-data');
+        var form      = document.querySelector('.reflection-form');
+        if (!container || !palette || !hidden || !form) return;
+
+        var LABELS = {
+            text:  'Paragraph',
+            image: 'Image(s)',
+            video: 'Video URL',
+            embed: 'Embed',
+            pdf:   'PDF / File'
+        };
+
+        function buildBlock(type) {
+            nextId++;
+            var id    = nextId;
+            var block = document.createElement('div');
+            block.className    = 'reflsub-student-block';
+            block.dataset.type = type;
+            block.dataset.id   = id;
+
+            var body = '';
+            if (type === 'text') {
+                body = '<textarea rows="5" class="reflsub-student-text" '
+                     + 'placeholder="Write your paragraph…  (Leave a blank line between paragraphs.)"></textarea>';
+            } else if (type === 'video') {
+                body = '<input type="url" class="reflsub-student-video" '
+                     + 'placeholder="https://www.youtube.com/watch?v=…">'
+                     + '<p class="reflection-hint">Paste a YouTube or Vimeo URL — it will embed in your post.</p>';
+            } else if (type === 'embed') {
+                body = '<textarea rows="4" class="reflsub-student-embed" '
+                     + 'placeholder="Paste your &lt;iframe&gt; embed code here — Kaltura, YouTube, Vimeo, etc."></textarea>'
+                     + '<p class="reflection-hint">Only <code>&lt;iframe&gt;</code> tags are accepted; other HTML will be stripped.</p>';
+            } else if (type === 'image') {
+                body = '<input type="file" name="reflsub_student_image_' + id + '[]" '
+                     + 'accept="image/jpeg,image/png,image/gif,image/webp" multiple>'
+                     + '<p class="reflection-hint">JPEG, PNG, GIF, WebP — max 15 MB per file. Select multiple to add a gallery.</p>';
+            } else if (type === 'pdf') {
+                body = '<input type="file" name="reflsub_student_pdf_' + id + '" '
+                     + 'accept=".pdf,application/pdf">'
+                     + '<p class="reflection-hint">PDF only. Max 15 MB.</p>';
+            }
+
+            block.innerHTML =
+                '<div class="reflsub-student-block-header">' +
+                    '<span class="reflsub-student-block-label">' + (LABELS[type] || type) + '</span>' +
+                    '<button type="button" class="reflsub-student-block-remove" aria-label="Remove this block">&times; Remove</button>' +
+                '</div>' + body;
+
+            block.querySelector('.reflsub-student-block-remove')
+                 .addEventListener('click', function() { block.remove(); });
+
+            return block;
+        }
+
+        palette.querySelectorAll('.reflsub-student-add-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var block = buildBlock(btn.dataset.blockType);
+                container.appendChild(block);
+                var first = block.querySelector('textarea, input[type="url"], input[type="file"]');
+                if (first) first.focus();
+            });
+        });
+
+        // JSON.stringify that preserves non-ASCII as real UTF-8 instead of
+        // \uXXXX escapes — keeps PHP's wp_unslash from eating the backslash.
+        function jsonStringifyUtf8(data) {
+            return JSON.stringify(data).replace(/\\u([0-9a-fA-F]{4})/g, function(_, hex) {
+                return String.fromCharCode(parseInt(hex, 16));
+            });
+        }
+
+        form.addEventListener('submit', function() {
+            var blocks = [];
+            container.querySelectorAll('.reflsub-student-block').forEach(function(el) {
+                var type = el.dataset.type;
+                var id   = parseInt(el.dataset.id, 10);
+                var b    = { id: id, type: type };
+                if (type === 'text') {
+                    b.content = (el.querySelector('.reflsub-student-text')  || {}).value || '';
+                } else if (type === 'video') {
+                    b.content = (el.querySelector('.reflsub-student-video') || {}).value || '';
+                } else if (type === 'embed') {
+                    b.content = (el.querySelector('.reflsub-student-embed') || {}).value || '';
+                }
+                // image / pdf blocks carry no JSON content — files arrive via $_FILES
+                blocks.push(b);
+            });
+            hidden.value = jsonStringifyUtf8(blocks);
+        });
     })();
     </script>
     <?php
