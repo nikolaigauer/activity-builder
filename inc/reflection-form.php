@@ -1358,6 +1358,12 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
     // form is always multipart regardless of which instructor sections are present.
     $form_enctype = ' enctype="multipart/form-data"';
 
+    // Per-page toggle: when off, the palette is hidden and the renderer falls
+    // back to baking in instructor image/video/embed/pdf sections. Missing meta
+    // defaults to allow (so existing pages aren't surprised by a hard lockdown).
+    $asb_raw              = get_post_meta( $page_id, '_reflsub_allow_student_blocks', true );
+    $allow_student_blocks = ( $asb_raw === '0' ) ? false : true;
+
     // ── Pre-fill values for edit mode ──────────────────────────────────────────
     $prefill = array();
     if ( $edit_post_id ) {
@@ -1426,9 +1432,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
             <?php foreach ( $sections as $i => $sec ) :
                 $type = $sec['type'] ?? '';
-                // Media section types are no longer rendered as baked-in slots —
-                // students add them on demand via the "+ Add" palette below.
-                if ( in_array( $type, array( 'image', 'video', 'embed', 'pdf' ), true ) ) {
+                // Media section types render as baked-in slots only when the
+                // Student Content Builder is off. When it's on, the "+ Add"
+                // palette below replaces them.
+                if ( $allow_student_blocks
+                     && in_array( $type, array( 'image', 'video', 'embed', 'pdf' ), true ) ) {
                     continue;
                 }
             ?>
@@ -1713,6 +1721,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
             <?php endforeach; ?>
 
+            <?php if ( $allow_student_blocks ) : ?>
             <!-- Student-added blocks palette: students dynamically add paragraphs,
                  images, video, embed, or PDF as needed. Order is preserved.
                  In edit mode, previously-saved student blocks are server-rendered
@@ -1744,6 +1753,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <button type="button" data-block-type="pdf"   class="reflsub-student-add-btn">PDF / File</button>
             </div>
             <input type="hidden" name="reflsub_student_blocks_data" id="reflsub-student-blocks-data" value="">
+            <?php endif; ?>
 
             <div class="reflection-submit">
                 <button type="submit" class="wp-element-button">

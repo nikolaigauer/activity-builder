@@ -222,6 +222,7 @@ function reflsub_render_page_builder() {
     $page_status         = 'publish'; // default for new pages
     $auto_tags_val       = '';
     $content_type_slug   = '';
+    $allow_student_blocks = 1; // default ON for new pages
 
     if ( $is_edit ) {
         $page = get_post( $edit_id );
@@ -238,6 +239,9 @@ function reflsub_render_page_builder() {
         $page_status         = $page->post_status;
         $auto_tags_val       = get_post_meta( $edit_id, '_reflsub_auto_tags', true ) ?: '';
         $content_type_slug   = get_post_meta( $edit_id, '_reflsub_content_type_slug', true ) ?: '';
+        // Missing/empty meta defaults to allowed; only the explicit string '0' disables.
+        $asb_raw = get_post_meta( $edit_id, '_reflsub_allow_student_blocks', true );
+        $allow_student_blocks = ( $asb_raw === '0' ) ? 0 : 1;
     }
 
     // Top-level pages only for parent selector (exclude self in edit mode)
@@ -377,6 +381,16 @@ function reflsub_render_page_builder() {
                                     <span>Students can submit to this form more than once</span>
                                 </label>
                                 <span class="reflsub-field-desc">Each submission creates a new post. Add an Entry Title section so students can name each entry.</span>
+                            </div>
+
+                            <div class="reflsub-field reflsub-field-check">
+                                <label>Student Content Builder</label>
+                                <label class="reflsub-toggle">
+                                    <input type="checkbox" name="reflsub_allow_student_blocks" value="1"
+                                           <?php checked( $allow_student_blocks, 1 ); ?>>
+                                    <span>Let students add their own paragraphs, images, video, embed, or PDF blocks on demand</span>
+                                </label>
+                                <span class="reflsub-field-desc">When off, students fill out only the exact sections you've added below — no "+ Add" palette is shown.</span>
                             </div>
 
                             <div class="reflsub-field">
@@ -1149,7 +1163,8 @@ function reflsub_save_reflection_page() {
     $title       = sanitize_text_field( wp_unslash( $_POST['reflsub_page_title'] ?? '' ) );
     $intro       = sanitize_textarea_field( wp_unslash( $_POST['reflsub_intro_text'] ?? '' ) );
     $privacy     = sanitize_key( $_POST['reflsub_privacy'] ?? 'publish' );
-    $allow_resub = isset( $_POST['reflsub_allow_resub'] ) ? 1 : 0;
+    $allow_resub          = isset( $_POST['reflsub_allow_resub'] ) ? 1 : 0;
+    $allow_student_blocks = isset( $_POST['reflsub_allow_student_blocks'] ) ? 1 : 0;
     $parent_id   = intval( $_POST['reflsub_parent_id'] ?? 0 );
     $page_status = sanitize_key( $_POST['reflsub_page_status'] ?? 'publish' );
 
@@ -1265,6 +1280,8 @@ function reflsub_save_reflection_page() {
     update_post_meta( $saved_id, 'allow_resubmission',       $allow_resub );
     update_post_meta( $saved_id, '_reflsub_auto_tags',       $auto_tags_val );
     update_post_meta( $saved_id, '_reflsub_content_type_slug', $content_type_slug );
+    // Cast to string so the renderer's "=== '0'" check sees the explicit value.
+    update_post_meta( $saved_id, '_reflsub_allow_student_blocks', $allow_student_blocks ? '1' : '0' );
 
     $saved_flag = $is_new ? 'created' : 'updated';
     wp_redirect( admin_url( 'admin.php?page=activity-builder&reflsub_saved=' . $saved_flag ) );
