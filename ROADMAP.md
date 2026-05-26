@@ -54,6 +54,46 @@ Correct split:
 
 ---
 
+## Block-Based Rendering & Instructor-Controlled Styling
+
+Today the activity page renders via the `[reflection_form]` shortcode, with the section
+schema stored as JSON in `_reflsub_sections` post meta. Submissions, by contrast, are
+already written as native Gutenberg block markup. Three related directions, in increasing
+ambition:
+
+### Shortcode → dynamic block (low–medium effort)
+Register `activity-builder/form` as a dynamic block with a PHP `render_callback` that calls
+the same render function the shortcode uses. Benefits: discoverable in the block inserter,
+shows as a labelled block with a placeholder preview on the canvas, future-proof for block
+themes / FSE. Honest limit: it's still server-rendered, so the editor shows a placeholder —
+it does **not** make the live form or the sections block-editable. Mostly a discoverability /
+"feels native" upgrade, not a structural change.
+
+### Hybrid composition: static parts as blocks, inputs as field shortcodes (high effort)
+Let instructors arrange the *static* scaffolding — intro text, headings, prompt copy,
+images — as ordinary Gutenberg blocks in the page, and drop small per-field tokens only
+where a live input belongs (e.g. `[reflection_field id="3"]` or a dedicated field block).
+The instructor then controls layout and design with the native editor; only the interactive,
+per-user fields stay server-rendered.
+- Feasible in principle (this is how some form plugins work).
+- Cost: gives up the single-source-of-truth schema and the unified builder. The submission
+  handler would have to *discover* which fields exist by scanning page content rather than
+  reading one JSON blob — more moving parts, more validation, harder migration.
+- Decision to make: is instructor layout freedom worth losing the constrained, typed builder?
+
+### Advanced "design" panel for instructors (medium–high effort)
+Rather than instructors editing plugin CSS, give them a styling panel — ideally a split
+screen: controls on one side, live placeholder preview on the other, updating in real time.
+- Store overrides in an **option / post meta**, output as a scoped `<style>` block on render.
+  Never write to the plugin's own CSS files — those are overwritten on update.
+- Keep plugin defaults intact so "Reset to defaults" is trivial (just clear the overrides).
+- Could be global (site-wide theme) and/or per-page.
+
+This is the more likely long-term answer to "let instructors control the look" without the
+re-architecture cost of the hybrid approach — and the two could combine later.
+
+---
+
 ## ACF Dependency Removal
 
 The plugin is already in a transitional state — pages created via the builder store all

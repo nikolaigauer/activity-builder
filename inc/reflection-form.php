@@ -1766,7 +1766,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
     <style>
         .reflection-form-wrap { max-width: 720px; margin: 2rem 0; }
-        .reflection-intro { margin-bottom: 1.75rem; font-size: 1rem; line-height: 1.7; color: #3c434a; }
+        .reflection-intro { margin-bottom: 1.75rem; padding: 1rem 1.25rem; font-size: 1.325rem; line-height: 1.65; color: #1d2327; background: #f6f7f7; border-radius: 8px; }
         .reflection-intro p { margin: 0 0 0.75rem; }
         .reflection-intro p:last-child { margin-bottom: 0; }
         .reflection-form .reflection-field { margin-bottom: 2rem; }
