@@ -94,20 +94,14 @@ re-architecture cost of the hybrid approach — and the two could combine later.
 
 ---
 
-## ACF Dependency Removal
+## ACF Dependency Removal ✓
 
-The plugin is already in a transitional state — pages created via the builder store all
-data in `_reflsub_sections` (JSON post meta) and no longer need ACF at all. ACF is only
-hit via the "legacy path" in `reflection-form.php` for pages originally built in the
-ePortfolio theme before the plugin was extracted.
-
-Removing the ACF dependency is feasible and would make the plugin fully standalone:
-- Replace `get_field( 'foo', $id )` → `get_post_meta( $id, 'foo', true )` throughout
-  the legacy path (underlying meta keys are identical — ACF is just a wrapper)
-- Remove `acf-fields.php` field group registration
-- Add a one-time migration notice for any pre-existing ACF-configured pages
-
-Do this before a public/ETUG release so the plugin has zero required dependencies.
+Completed. The plugin has **zero required dependencies** — no `get_field()`/`the_field()`
+or any ACF call remains anywhere in `inc/` or the main plugin file.
+- All field config reads/writes via `get_post_meta()` / `update_post_meta()` (same meta
+  keys ACF used — ACF was only ever a wrapper)
+- `acf-fields.php` field-group registration deleted
+- Both the builder (`_reflsub_sections`) and legacy paths now read post meta directly
 
 ---
 
