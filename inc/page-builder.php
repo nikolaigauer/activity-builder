@@ -325,7 +325,7 @@ function reflsub_render_page_builder() {
                                     <?php endforeach; ?>
                                 </select>
                                 <span class="reflsub-field-desc">
-                                    Nest under a parent page so it auto-appears in the sidebar menu and groups with related pages in the Progress view.
+                                    Nest under a parent page so it auto-appears in any menus using Parent pages.
                                 </span>
                                 <button type="button" id="reflsub-new-parent-toggle" class="reflsub-new-parent-toggle"
                                         data-nonce="<?php echo esc_attr( wp_create_nonce( 'reflsub_create_parent_page' ) ); ?>">
@@ -360,7 +360,6 @@ function reflsub_render_page_builder() {
                                     <option value="draft"   <?php selected( $page_status, 'draft' ); ?>>Draft</option>
                                     <option value="private" <?php selected( $page_status, 'private' ); ?>>Private</option>
                                 </select>
-                                <span class="reflsub-field-desc">Controls whether students can access the page.</span>
                             </div>
 
                             <div class="reflsub-field">
@@ -374,23 +373,21 @@ function reflsub_render_page_builder() {
                             </div>
 
                             <div class="reflsub-field reflsub-field-check">
-                                <label>Multiple Submissions</label>
                                 <label class="reflsub-toggle">
                                     <input type="checkbox" name="reflsub_allow_resub" value="1"
                                            <?php checked( $allow_resub, 1 ); ?>>
-                                    <span>Students can submit to this form more than once</span>
+                                    <span>Re-use Form</span>
                                 </label>
-                                <span class="reflsub-field-desc">Each submission creates a new post. Add an Entry Title section so students can name each entry.</span>
+                                <span class="reflsub-field-desc">Each submission creates a new post.</span>
                             </div>
 
                             <div class="reflsub-field reflsub-field-check">
-                                <label>Student Content Builder</label>
                                 <label class="reflsub-toggle">
                                     <input type="checkbox" name="reflsub_allow_student_blocks" value="1"
                                            <?php checked( $allow_student_blocks, 1 ); ?>>
-                                    <span>Let students add their own paragraphs, images, video, embed, or PDF blocks on demand</span>
+                                    <span>Enable Student Tools</span>
                                 </label>
-                                <span class="reflsub-field-desc">When off, students fill out only the exact sections you've added below — no "+ Add" palette is shown.</span>
+                                <span class="reflsub-field-desc">When disabled, students fill out only the exact sections you've added below.</span>
                             </div>
 
                             <div class="reflsub-field">
@@ -416,7 +413,6 @@ function reflsub_render_page_builder() {
                                        placeholder="e.g. reflection"
                                        value="<?php echo esc_attr( $content_type_slug ); ?>">
                                 <?php endif; ?>
-                                <span class="reflsub-field-desc">Submissions are tagged with this content type in the student archive. Create terms under Posts → Content Types.</span>
                             </div>
 
                         </div><!-- /.reflsub-col-sidebar -->
@@ -892,7 +888,7 @@ function reflsub_render_page_builder() {
             if (type === 'prompt') {
                 var checked = data.required ? ' checked' : '';
                 return '<label>Prompt / Question</label>' +
-                    '<textarea class="reflsub-prompt-label" rows="3" placeholder="Enter the prompt students will respond to…">' +
+                    '<textarea class="reflsub-prompt-label" rows="3" placeholder="Enter the prompt students will respond to, or leave blank…">' +
                     esc(data.label || '') + '</textarea>' +
                     '<div class="reflsub-section-meta">' +
                     '<label><input type="number" class="reflsub-word-limit" min="0" placeholder="No limit" value="' + esc(data.word_limit || '') + '"> Word limit (0 = none)</label>' +

@@ -2,11 +2,17 @@
 
 A WordPress plugin for structured activities and reflection in higher-education ePortfolios.
 
-The plugin was built with the intention of making it easier for both students and instructors to use Wordpress as an ePortfolio platform.
+The hope is to make it easier for both students and instructors to use WordPress as an ePortfolio platform.
 
-Instructors builds activity and reflection prompt pages using a section-based visual builder. Students complete and submit responses directly on the page via easy-to-use forms.
+Instructors build activity and reflection prompt pages using a section-based visual builder. Students complete and submit responses directly on the page via easy-to-use forms or the plugin’s custom post builder.
 
+**Instructor view** — building an activity page in the WordPress admin: page settings and form sections on a single screen.
 
+![The Activity Builder page builder in the WordPress admin](Activity-Builder-Screenshot.png)
+
+**Student view** — the response form as students see it: image upload, written prompts, and multiple choice.
+
+![A student activity form with an image upload zone, text response prompts, and a multiple-choice question](activity-builder-screenshot-student-view.png)
 
 ---
 
@@ -44,13 +50,9 @@ Instructors builds activity and reflection prompt pages using a section-based vi
 
 ## Usage
 
-### Shortcode
-
-Add `[reflection_form]` to any page that has been configured as a reflection page via the builder. No attributes required — the plugin reads the page's saved configuration automatically.
-
 ### Page Builder
 
-Go to **Reflections → Reflection Pages** in the WordPress admin and create or edit a page. Use the section builder to add and reorder sections, then save. Publish the corresponding WordPress page and add the shortcode.
+In the WordPress admin, go to **Activity Builder → Activity Pages** and click **+ New Activity Page**. Add and reorder sections, set the page options in the sidebar, and save. The plugin creates a matching WordPress page with the `[reflection_form]` shortcode already in place, so the form appears for students as soon as you publish.
 
 ---
 
