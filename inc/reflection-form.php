@@ -537,10 +537,16 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         }
 
         if ( $type === 'image' ) {
-            $img_names = $_FILES['section_image']['name'] ?? array();
-            if ( is_array( $img_names ) && ! empty( $img_names[0] ) ) {
-                $has_content   = true;
-                $image_sec_idx = $i;
+            // Record the section position whenever an image block is configured —
+            // even with no new upload — so the kept-image rebuild below runs in
+            // edit mode. Without this, leaving the image alone while editing text
+            // silently drops the original images from the post.
+            $image_sec_idx  = $i;
+            $img_names      = $_FILES['section_image']['name'] ?? array();
+            $has_new_image  = is_array( $img_names ) && ! empty( $img_names[0] );
+            $has_kept_image = $edit_post_id && ! empty( $_POST['reflsub_keep_image_ids'] );
+            if ( $has_new_image || $has_kept_image ) {
+                $has_content         = true;
                 $ordered_parts[ $i ] = null; // placeholder — filled after post creation
             }
         }
