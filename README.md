@@ -58,4 +58,4 @@ In the WordPress admin, go to **Activity Builder → Activity Pages** and click 
 
 ## License
 
-GPL-2.0-or-later — see [LICENSE](LICENSE).
+Activity Builder, Copyright (C) 2026 Nikolai Gauer. Licensed under the GNU General Public License v2 or later. See LICENSE or https://www.gnu.org/licenses/gpl-2.0.html
