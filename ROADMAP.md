@@ -135,6 +135,79 @@ Things to think through:
 
 ---
 
+## README: "Customizing styles in your theme" section (small, near-term)
+
+The plugin ships sensible visual defaults but emits stable, documented class names so
+theme authors / site admins can override anything without touching plugin code. Document
+the override surface in README.md so it's discoverable to anyone browsing the repo, then
+later mirror the same content into a Setup admin tab (see next item).
+
+Classes worth listing (non-exhaustive starting set):
+- `.reflection-intro` — intro/excerpt box at the top of the activity page
+- `.reflsub-prompt-label` — italicized weighted label above each prompt response on rendered posts
+- `.reflection-form-wrap`, `.reflection-form`, `.reflection-field` — form scaffolding
+- `.reflsub-drop-zone`, `.reflsub-existing-images`, `.reflsub-existing-wrap` — image upload UI
+- `.reflsub-student-block`, `.reflsub-student-palette` — student-added blocks palette
+- Re-reflect card classes (TBD: confirm names from `reflection-form.php`)
+
+Pattern: include a small copy-pasteable example override block in the README so the
+reader doesn't have to invent one.
+
+---
+
+## Setup admin page: "Theme styling" tab (medium effort, blocks on the above)
+
+Current Setup page is a single-flow card layout — no tab framework. Introducing tabs
+only makes sense once there's more than one tab justified. Add tabs when both:
+1. "Site Setup" (current content) stays as tab 1
+2. "Theme styling" (mirror of the README class list, eventually with a color picker
+   and live preview) lands as tab 2
+
+Storage pattern when the styling panel grows: persist overrides in a site option,
+emit them as a scoped `<style>` block on render. Never write to the plugin's own CSS
+files — they're overwritten on update. See "Advanced design panel" section above —
+this is the same idea staged smaller.
+
+---
+
+## Gutenberg editor styles for `.reflsub-prompt-label` (tiny, near-term)
+
+The prompt-label class is preserved on a paragraph block round-trip (Gutenberg respects
+the `className` attribute), but the visual styling lives in a `wp_head` `<style>` tag
+that only fires on the frontend — so students editing a post in Gutenberg see a plain
+paragraph instead of the italicized weighted label. The class survives, the styling
+doesn't.
+
+Fix: add `enqueue_block_editor_assets` hook that injects the same CSS into the editor
+iframe so the editor view matches the published view. ~6 lines. Low risk, high consistency
+payoff for any student who opens "Edit Post" after submitting.
+
+---
+
+## TipTap-based rich text editor (large, exploratory)
+
+Replace the current plain `<textarea>` inputs in the page builder (instructor side) with
+a [TipTap](https://tiptap.dev/) editor for prompt copy, intro text, and re-reflect headings —
+giving instructors inline bold/italic/links/lists without leaving the builder UI.
+
+Optionally make the same editor available to students for paragraph blocks in the
+submission form, gated by a per-page toggle (so instructors can choose plain text for
+short-form prompts and rich text for longer reflective writing).
+
+Considerations:
+- TipTap is ProseMirror-based, modular, framework-agnostic — bundles cleanly without React
+- Serialization format choice matters: HTML round-trips into Gutenberg paragraph blocks
+  naturally; JSON would need a converter. Probably store as constrained HTML.
+- Sanitization: the existing `wp_kses` whitelist approach extends naturally — define an
+  allowed-tags set that matches what TipTap can produce
+- Bundle size: TipTap + ProseMirror is ~100kb minified — acceptable for the builder,
+  worth more thought before loading on every student form
+- Conflict surface: WordPress already ships TinyMCE and Gutenberg. Adding a third
+  editor is a deliberate choice — justify it by the friction it removes for instructors
+  composing prompts and the consistency of UI between prompt config and submission
+
+---
+
 ## ePortfolio Theme Cleanup ✓
 
 Completed. The theme (`eportfolio-theme-2`) has been cleaned up:
