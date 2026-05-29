@@ -3,7 +3,7 @@
  * Plugin Name:       Activity Builder
  * Plugin URI:        https://github.com/nikolaigauer/activity-builder
  * Description:       ePortfolio reflection plugin for higher education. Instructors build structured prompt pages via a section-based builder; students submit responses via the [reflection_form] shortcode. No external dependencies.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            Nikolai Gauer
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'REFLSUB_VERSION', '1.0.0' );
+define( 'REFLSUB_VERSION', '1.1.0' );
 define( 'REFLSUB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'REFLSUB_URL', plugin_dir_url( __FILE__ ) );
 
