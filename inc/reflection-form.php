@@ -27,6 +27,7 @@ add_action( 'wp_head', function () {
     <style>
     .reflsub-prompt-label {
         font-style: italic;
+        font-weight: 600;
         font-size: 0.9em;
         color: #64748b;
         border-left: 3px solid #ace7d4;
