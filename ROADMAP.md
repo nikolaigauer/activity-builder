@@ -4,6 +4,50 @@ Ideas and future directions parked here for reference. Not committed to any time
 
 ---
 
+## Production Smoke Test — Bugs Found & Fixed (2026-06-02 → 2026-06-03, Writing Centre)
+
+First real deployment: Writing Centre learning tutors journaling their praxis on
+ePortfolio Theme 2 + Activity Builder. Three issues found in the director walkthrough,
+all fixed 2026-06-03.
+
+### Bug 2 — Em dash / curly apostrophe corrupt in prompts ✓ FIXED
+`week’s` → `weeku2019s`, `feedback – giving` → `feedback u2013 giving` — at save time.
+- **Real cause (confirmed by local repro):** `update_post_meta()` runs `wp_unslash()` on its
+  value internally, and `wp_json_encode()` emits `’`/`—` escapes by default. WP
+  strips the backslash out of the stored JSON → `u2019` garbage. **Server-side**, nothing to
+  do with the JS `jsonStringify()` wrapper (which is a no-op on modern browsers — `JSON.stringify`
+  no longer escapes those chars). Worse latent form: a prompt containing a literal `"` made
+  `json_decode` return `null`, silently wiping the page's entire sections array.
+- **Fix:** wrap every JSON-meta write in `wp_slash( wp_json_encode( … ) )` so WP's internal
+  unslash cancels cleanly. `JSON_UNESCAPED_UNICODE` alone is **not** enough (still breaks on
+  `"`/newlines). Applied at `page-builder.php` (`_reflsub_sections`) and `reflection-form.php`
+  (`_reflsub_mcq_*`, `_reflsub_student_blocks`).
+- **Not auto-repaired:** pages already saved with the corrupt build keep the garbled text in
+  the DB — the instructor must retype those prompts once. (Few pages in the smoke test; a
+  migration wasn't worth the false-positive risk.)
+- **Follow-up (optional):** the now-dead `jsonStringify()`/`jsonStringifyUtf8()` JS wrappers
+  can be removed; harmless to leave. Add a round-trip test fixture (`— – ’ " newline`).
+
+### Bug 3 — Student Tools toggle flattened structured pages ✓ FIXED
+Enabling Student Tools dropped the instructor's structured media slots, deflating a designed
+activity chain into a generic "add whatever" form.
+- **Cause:** `reflection-form.php` `continue`'d on `image`/`video`/`embed`/`pdf` sections when
+  `$allow_student_blocks` was on (assumed the "+ Add" palette *replaced* baked-in slots).
+- **Fix:** removed the skip. Student Tools are now **additive** — structured sections always
+  render in the designed order and the palette appends optional extras after them. The
+  submission handler already processed both unconditionally, so no handler change was needed.
+
+### Bug 1 — Content Type field was a no-op + now supports ad-hoc creation ✓ FIXED
+When `content-type` had no terms, the builder showed a free-text input that *looked* editable
+but only stored an orphan slug — `reflection-form.php:905` looks up the term by slug, finds
+nothing, tags nothing.
+- **Fix:** field is now a single combobox (`<input list=…>` + `<datalist>`) that works whether
+  or not terms exist — pick an existing type or type a new one. New `reflsub_resolve_content_type_slug()`
+  resolves the input by name/slug and `wp_insert_term()`s it on the fly when missing, storing
+  the resulting slug. Instructors can now create content types without leaving the builder.
+
+---
+
 ## Re-reflection & Student Growth Features
 
 The core pedagogical insight: ePortfolios derive their value from students being able to

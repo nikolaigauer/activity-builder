@@ -709,7 +709,8 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         update_post_meta( $post_id, '_reflsub_response_' . $i, $response );
     }
     foreach ( $mcq_meta as $i => $sel ) {
-        update_post_meta( $post_id, '_reflsub_mcq_' . $i, wp_json_encode( $sel ) );
+        // wp_slash(): update_post_meta() unslashes internally; protect JSON escapes from corruption.
+        update_post_meta( $post_id, '_reflsub_mcq_' . $i, wp_slash( wp_json_encode( $sel ) ) );
     }
     if ( $video_meta ) update_post_meta( $post_id, '_reflection_video_url', $video_meta );
     if ( $embed_meta ) update_post_meta( $post_id, '_reflection_embed', $embed_meta );
@@ -882,7 +883,8 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
 
     // Persist student-block state so edit mode can replay the blocks.
     if ( $student_state ) {
-        update_post_meta( $post_id, '_reflsub_student_blocks', wp_json_encode( $student_state ) );
+        // wp_slash(): update_post_meta() unslashes internally; protect JSON escapes from corruption.
+        update_post_meta( $post_id, '_reflsub_student_blocks', wp_slash( wp_json_encode( $student_state ) ) );
     } else {
         delete_post_meta( $post_id, '_reflsub_student_blocks' );
     }
@@ -1439,13 +1441,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
 
             <?php foreach ( $sections as $i => $sec ) :
                 $type = $sec['type'] ?? '';
-                // Media section types render as baked-in slots only when the
-                // Student Content Builder is off. When it's on, the "+ Add"
-                // palette below replaces them.
-                if ( $allow_student_blocks
-                     && in_array( $type, array( 'image', 'video', 'embed', 'pdf' ), true ) ) {
-                    continue;
-                }
+                // Student Tools are additive: the instructor's structured sections —
+                // including baked-in image/video/embed/pdf slots — always render in the
+                // designed order so a deliberate activity layout is never collapsed. When
+                // Student Tools is on, the "+ Add" palette below simply appends optional
+                // extra blocks after the structured form.
             ?>
 
             <?php if ( $type === 'entry_title' ) :

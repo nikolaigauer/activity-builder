@@ -398,21 +398,34 @@ function reflsub_render_page_builder() {
                                 $ct_terms = taxonomy_exists( 'content-type' )
                                     ? get_terms( array( 'taxonomy' => 'content-type', 'hide_empty' => false ) )
                                     : array();
-                                if ( ! empty( $ct_terms ) && ! is_wp_error( $ct_terms ) ) : ?>
-                                <select id="reflsub-content-type" name="reflsub_content_type_slug">
-                                    <option value="">— None —</option>
+                                if ( is_wp_error( $ct_terms ) ) {
+                                    $ct_terms = array();
+                                }
+                                // Show the saved term's display name in the combobox; fall back
+                                // to the raw slug if the term was since deleted.
+                                $content_type_name = '';
+                                if ( $content_type_slug ) {
+                                    foreach ( $ct_terms as $ct ) {
+                                        if ( $ct->slug === $content_type_slug ) {
+                                            $content_type_name = $ct->name;
+                                            break;
+                                        }
+                                    }
+                                    if ( $content_type_name === '' ) {
+                                        $content_type_name = $content_type_slug;
+                                    }
+                                }
+                                ?>
+                                <input type="text" id="reflsub-content-type" name="reflsub_content_type_name"
+                                       list="reflsub-content-type-options" autocomplete="off"
+                                       placeholder="Pick an existing type or type a new one…"
+                                       value="<?php echo esc_attr( $content_type_name ); ?>">
+                                <datalist id="reflsub-content-type-options">
                                     <?php foreach ( $ct_terms as $ct ) : ?>
-                                    <option value="<?php echo esc_attr( $ct->slug ); ?>"
-                                            <?php selected( $content_type_slug, $ct->slug ); ?>>
-                                        <?php echo esc_html( $ct->name ); ?>
-                                    </option>
+                                    <option value="<?php echo esc_attr( $ct->name ); ?>"></option>
                                     <?php endforeach; ?>
-                                </select>
-                                <?php else : ?>
-                                <input type="text" id="reflsub-content-type" name="reflsub_content_type_slug"
-                                       placeholder="e.g. reflection"
-                                       value="<?php echo esc_attr( $content_type_slug ); ?>">
-                                <?php endif; ?>
+                                </datalist>
+                                <span class="reflsub-field-desc">Choose one you've used before, or type a new name to create it on the fly.</span>
                             </div>
 
                         </div><!-- /.reflsub-col-sidebar -->
@@ -1147,6 +1160,36 @@ function reflsub_render_page_builder() {
 
 // ── Save handler ──────────────────────────────────────────────────────────────
 
+/**
+ * Resolve a content-type input — a display name or a slug — to a term slug,
+ * creating the term on the fly when it doesn't exist yet. Lets instructors add
+ * a content type straight from the builder instead of going to Posts → Content Type.
+ * Returns '' when the input is empty or the taxonomy isn't registered.
+ */
+function reflsub_resolve_content_type_slug( $input ) {
+    $input = trim( (string) $input );
+    if ( $input === '' || ! taxonomy_exists( 'content-type' ) ) {
+        return '';
+    }
+    // Prefer an existing term — match on display name first, then slug.
+    $term = get_term_by( 'name', $input, 'content-type' );
+    if ( ! $term ) {
+        $term = get_term_by( 'slug', sanitize_title( $input ), 'content-type' );
+    }
+    if ( $term && ! is_wp_error( $term ) ) {
+        return $term->slug;
+    }
+    // No match — create it from the typed name and use the generated slug.
+    $created = wp_insert_term( $input, 'content-type' );
+    if ( ! is_wp_error( $created ) && ! empty( $created['term_id'] ) ) {
+        $new = get_term( $created['term_id'], 'content-type' );
+        if ( $new && ! is_wp_error( $new ) ) {
+            return $new->slug;
+        }
+    }
+    return '';
+}
+
 add_action( 'admin_post_reflsub_save_reflection_page', 'reflsub_save_reflection_page' );
 function reflsub_save_reflection_page() {
     if ( ! current_user_can( 'manage_options' ) ) {
@@ -1170,7 +1213,10 @@ function reflsub_save_reflection_page() {
         array_map( 'sanitize_text_field', array_map( 'trim', explode( ',', $auto_tags_raw ) ) )
     ) ) );
 
-    $content_type_slug = sanitize_key( $_POST['reflsub_content_type_slug'] ?? '' );
+    // Content type accepts either an existing term name/slug or a brand-new name typed
+    // in the combobox — resolve it to a slug, creating the term on the fly when needed.
+    $content_type_input = sanitize_text_field( wp_unslash( $_POST['reflsub_content_type_name'] ?? '' ) );
+    $content_type_slug  = reflsub_resolve_content_type_slug( $content_type_input );
 
     if ( ! in_array( $privacy, array( 'publish', 'private', 'pending' ), true ) ) {
         $privacy = 'publish';
@@ -1270,7 +1316,10 @@ function reflsub_save_reflection_page() {
     $saved_id = $result;
 
     // Save meta
-    update_post_meta( $saved_id, '_reflsub_sections',        wp_json_encode( $sections ) );
+    // wp_slash(): update_post_meta() runs wp_unslash() on its value internally, which would
+    // otherwise strip the backslash out of JSON escapes (’, \", \n …) and corrupt the
+    // blob — e.g. a curly apostrophe became "weeku2019s", and a literal " broke decode entirely.
+    update_post_meta( $saved_id, '_reflsub_sections',        wp_slash( wp_json_encode( $sections ) ) );
     update_post_meta( $saved_id, 'is_reflection_page',       1 );
     update_post_meta( $saved_id, 'submission_privacy',       $privacy );
     update_post_meta( $saved_id, 'allow_resubmission',       $allow_resub );
