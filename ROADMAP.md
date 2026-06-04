@@ -4,6 +4,49 @@ Ideas and future directions parked here for reference. Not committed to any time
 
 ---
 
+## Feature Requests (2026-06-03)
+
+Incoming from instructors using the Writing Centre deployment.
+
+### Audio recording section type (in progress 2026-06-03)
+Let students record an audio response in the browser — a new `audio` section type alongside
+`text`/`image`/`pdf`/etc. Chosen approach: **native `MediaRecorder` + `getUserMedia`**, no
+external libraries, no transcoding, no telephony vendor. The recorded blob rides the *exact*
+storage path the `pdf` section already uses (`$_FILES` → `wp_handle_upload()` → attach to post),
+so the back half is already built.
+
+- **Recording limit:** 5 minutes (hard cap — auto-stops the recorder and surfaces remaining
+  time in the UI).
+- **Playback before submit:** `URL.createObjectURL(blob)` into an `<audio controls>` so the
+  student can listen and re-record before committing.
+- **Format:** store whatever the browser emits — `audio/webm` (Opus) on Chrome/Firefox,
+  `audio/mp4` on Safari/iOS. Both play in all modern browsers; no server-side conversion.
+  Allow both MIME types in the upload filter.
+- **"Via phone":** the *phone browser* path is free and already covered by `getUserMedia` on
+  mobile Safari/Chrome (uses the device mic). True call-in telephony (Twilio etc.) is parked —
+  recurring cost + external vendor in the privacy story, not worth it unless an accessibility
+  driver appears.
+- **Gotchas:** `getUserMedia` requires HTTPS (or `localhost` for dev); ~1 MB/min for Opus, so
+  a 5-min clip ≈ 5 MB — reuse the existing client-side `post_max_size` guard; reset the file
+  input without wiping the assigned blob (same DataTransfer dance as the drag-drop image zone).
+- **Three-place wiring** (mirrors every section type): builder toggle in `page-builder.php`,
+  recorder widget + save branch in `reflection-form.php`, same widget in `post-form.php`.
+
+### Activity Page duplicator (parked)
+A **Duplicate** row-action under the Actions column on Dashboard › Activity Builder › Activity
+Pages (Edit / View / Duplicate / Trash). Handler: `get_post()` the source → `wp_insert_post()`
+a **Draft** copy with `" (Copy)"` appended → copy the activity-definition meta only
+(`_reflsub_sections`, `reflection_prompt_*`, `submission_privacy`, `allow_*`, `content_type_label`,
+`is_reflection_page`).
+- **Copy `_reflsub_sections` as the raw stored string** — do *not* decode/re-encode, or you risk
+  re-triggering the `wp_slash` / `\uXXXX` JSON-meta corruption fixed 2026-06-03.
+- Never copy student submission posts — only the activity definition.
+- Nonce + `current_user_can('edit_pages')` on the handler (state-changing link).
+- Lands as Draft so the instructor edits before publishing.
+- Effort: ~half a day. Lower priority than audio.
+
+---
+
 ## Production Smoke Test — Bugs Found & Fixed (2026-06-02 → 2026-06-03, Writing Centre)
 
 First real deployment: Writing Centre learning tutors journaling their praxis on

@@ -449,6 +449,7 @@ function reflsub_render_page_builder() {
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('embed')">Embed</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('tags')">Student Tags</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('pdf')">PDF / File</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('audio')">Audio Recording</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubAddSection('re_reflect')">Re-reflect</button>
                     </div>
                 </div>
@@ -801,6 +802,7 @@ function reflsub_render_page_builder() {
             embed:  'Embed Code',
             tags:   'Student Tags',
             pdf:        'PDF / File Upload',
+            audio:      'Audio Recording',
             re_reflect: 'Re-reflect on a Past Post'
         };
 
@@ -944,6 +946,17 @@ function reflsub_render_page_builder() {
                     '<div class="reflsub-section-meta"><label><input type="checkbox" class="reflsub-pdf-required"' + reqChecked + '> Required</label></div>';
             }
 
+            if (type === 'audio') {
+                var reqChecked = data.required ? ' checked' : '';
+                var maxMin = parseInt(data.max_minutes, 10);
+                if (isNaN(maxMin) || maxMin <= 0) maxMin = 5;
+                return '<p class="reflsub-flag-note">Adds an in-browser audio recorder. Students record a response with their device microphone, play it back, and re-record before submitting. Requires HTTPS (works on localhost for testing).</p>' +
+                    '<div class="reflsub-section-meta">' +
+                    '<label><input type="number" class="reflsub-audio-max" min="1" max="30" value="' + esc(maxMin) + '" style="width:70px;"> Max length (minutes)</label>' +
+                    '<label><input type="checkbox" class="reflsub-audio-required"' + reqChecked + '> Required</label>' +
+                    '</div>';
+            }
+
             if (type === 're_reflect') {
                 var pickRandom  = (!data.pick || data.pick === 'random')  ? ' selected' : '';
                 var pickLatest  = (data.pick === 'latest')                ? ' selected' : '';
@@ -1009,6 +1022,12 @@ function reflsub_render_page_builder() {
 
                 if (type === 'pdf') {
                     sec.required = el.querySelector('.reflsub-pdf-required').checked;
+                }
+
+                if (type === 'audio') {
+                    var am = parseInt(el.querySelector('.reflsub-audio-max').value, 10);
+                    sec.max_minutes = isNaN(am) || am <= 0 ? 5 : Math.min(am, 30);
+                    sec.required    = el.querySelector('.reflsub-audio-required').checked;
                 }
 
                 if (type === 'entry_title') {
@@ -1263,6 +1282,11 @@ function reflsub_save_reflection_page() {
                         break;
                     case 'pdf':
                         $clean['required'] = ! empty( $sec['required'] );
+                        break;
+                    case 'audio':
+                        $max = intval( $sec['max_minutes'] ?? 5 );
+                        $clean['max_minutes'] = min( 30, max( 1, $max ) );
+                        $clean['required']    = ! empty( $sec['required'] );
                         break;
                     case 're_reflect':
                         $clean['heading']   = sanitize_text_field( $sec['heading'] ?? '' );

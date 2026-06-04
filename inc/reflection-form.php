@@ -40,6 +40,45 @@ add_action( 'wp_head', function () {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Allow browser-recorded audio MIME types for the Audio Recording section.
+// MediaRecorder emits audio/webm (Chrome/Firefox) or audio/mp4 (Safari/iOS);
+// the .webm/.m4a/.ogg extensions are mapped here so wp_handle_upload accepts them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+add_filter( 'upload_mimes', 'reflsub_allow_audio_mimes' );
+function reflsub_allow_audio_mimes( $mimes ) {
+    // webm / mp4 / ogg are already in core's default allow-list; add the audio-only
+    // sibling extensions defensively without clobbering core's existing mappings.
+    if ( empty( $mimes['weba'] ) ) $mimes['weba'] = 'audio/webm';
+    if ( empty( $mimes['m4a'] ) )  $mimes['m4a']  = 'audio/mp4';
+    return $mimes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enqueue the front-end form JavaScript.
+// Loaded as a real script (NOT inlined in shortcode output) so it never passes
+// through the_content / wptexturize — which would corrupt && into &#038;&#038;.
+// Called from inside the render functions, so it only loads on pages that
+// actually output the form. Both render paths share this one element-guarded file.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function reflsub_enqueue_form_assets() {
+    if ( wp_script_is( 'reflsub-reflection-form', 'enqueued' ) ) {
+        return;
+    }
+    wp_enqueue_script(
+        'reflsub-reflection-form',
+        REFLSUB_URL . 'assets/js/reflection-form.js',
+        array(),
+        REFLSUB_VERSION,
+        true // in footer — runs after the form HTML is in the DOM
+    );
+    wp_localize_script( 'reflsub-reflection-form', 'reflsubForm', array(
+        'postMaxBytes' => (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ),
+    ) );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper: sanitize an embed code — allows <iframe> only, strips everything else
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -481,6 +520,8 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     $image_sec_idx      = -1;    // section index of the image upload, or -1 if none
     $pdf_sec_idx        = -1;    // section index of the PDF section, or -1 if none
     $pdf_upload_pending = false; // true only when a new PDF file was actually submitted
+    $audio_sec_idx        = -1;    // section index of the audio recording, or -1 if none
+    $audio_upload_pending = false; // true only when a new audio recording was submitted
     $prompt_meta    = array(); // i => raw response text (stored as meta after post creation)
     $mcq_meta       = array(); // i => sanitized selected options array
     $video_meta     = '';
@@ -595,6 +636,19 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 }
             }
         }
+
+        if ( $type === 'audio' ) {
+            $audio_sec_idx = $i; // always record position, regardless of whether a recording was submitted
+            $audio_name    = $_FILES['section_audio']['name'] ?? '';
+            if ( $audio_name !== '' && ( $_FILES['section_audio']['error'] ?? UPLOAD_ERR_NO_FILE ) === UPLOAD_ERR_OK ) {
+                // Hard server-side ceiling: 30-min cap at ~1 MB/min Opus leaves generous headroom at 60 MB.
+                if ( ( $_FILES['section_audio']['size'] ?? 0 ) <= 60 * 1024 * 1024 ) {
+                    $has_content          = true;
+                    $audio_upload_pending = true;
+                    $ordered_parts[ $i ]  = null; // placeholder — filled after post creation
+                }
+            }
+        }
     }
 
     // Edit mode: if no new PDF was submitted but the student has an existing one,
@@ -614,6 +668,22 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 esc_url( $keep_pdf_url )
             );
             $has_content = true; // kept PDF counts as valid submission content
+        }
+    }
+
+    // Edit mode: if no new recording was submitted but the student has an existing one,
+    // rebuild the audio block from the kept attachment so the post content preserves it.
+    if ( $edit_post_id && $audio_sec_idx >= 0 && ! $audio_upload_pending && ! empty( $_POST['reflsub_keep_audio_id'] ) ) {
+        $keep_audio_id = intval( $_POST['reflsub_keep_audio_id'] );
+        $keep_att      = get_post( $keep_audio_id );
+        if ( $keep_att && $keep_att->post_type === 'attachment' && (int) $keep_att->post_parent === $edit_post_id ) {
+            $keep_audio_url = wp_get_attachment_url( $keep_audio_id );
+            $ordered_parts[ $audio_sec_idx ] = sprintf(
+                '<!-- wp:audio {"id":%d} --><figure class="wp-block-audio"><audio controls src="%s"></audio></figure><!-- /wp:audio -->',
+                $keep_audio_id,
+                esc_url( $keep_audio_url )
+            );
+            $has_content = true; // kept recording counts as valid submission content
         }
     }
 
@@ -760,6 +830,23 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 esc_url( $pdf_url ),
                 esc_html( $pdf_title ),
                 esc_url( $pdf_url )
+            );
+        }
+    }
+
+    // Audio recording upload — resolve placeholder at the correct section position (new upload only)
+    if ( $audio_upload_pending ) {
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+
+        $audio_id = media_handle_upload( 'section_audio', $post_id );
+        if ( ! is_wp_error( $audio_id ) ) {
+            $audio_url = wp_get_attachment_url( $audio_id );
+            $ordered_parts[ $audio_sec_idx ] = sprintf(
+                '<!-- wp:audio {"id":%d} --><figure class="wp-block-audio"><audio controls src="%s"></audio></figure><!-- /wp:audio -->',
+                $audio_id,
+                esc_url( $audio_url )
             );
         }
     }
@@ -1183,81 +1270,7 @@ function reflsub_reflection_form_shortcode( $atts ) {
         .reflection-duplicate { background: #fff8e5; border-left: 4px solid #dba617; }
     </style>
 
-    <script>
-    (function() {
-        var form     = document.querySelector('.reflection-form[data-page-id]');
-        // Key is scoped to both page and logged-in user — prevents draft leaking
-        // between users on shared machines / lab computers.
-        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId + '_' + form.dataset.userId : null;
-        // Clean up any legacy un-scoped key left by earlier builds.
-        if ( form ) { try { localStorage.removeItem( 'reflsub_draft_' + form.dataset.pageId ); } catch(e) {} }
-        if ( draftKey ) {
-            if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
-                localStorage.removeItem( draftKey );
-            } else {
-                var saved = null;
-                try { saved = JSON.parse( localStorage.getItem( draftKey ) ); } catch(e) {}
-                if ( saved && Object.keys(saved).length ) {
-                    var anyRestored = false;
-                    Object.keys(saved).forEach(function(name) {
-                        var el = form.querySelector('[name="' + name + '"]');
-                        if ( el && ( el.tagName === 'TEXTAREA' || ( el.tagName === 'INPUT' && el.type === 'text' ) ) ) {
-                            el.value = saved[name]; anyRestored = true;
-                        }
-                    });
-                    if ( anyRestored ) {
-                        var notice = document.createElement('div');
-                        notice.className = 'reflection-notice reflection-info';
-                        notice.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1.5rem;';
-                        notice.innerHTML = '<p style="margin:0;"><strong>Draft restored.</strong> Your previous text was saved automatically.</p>'
-                            + '<button type="button" style="background:none;border:none;color:#2271b1;cursor:pointer;white-space:nowrap;padding:0;font-size:0.9rem;text-decoration:underline;">Discard &amp; start fresh</button>';
-                        form.parentNode.insertBefore( notice, form );
-                        notice.querySelector('button').addEventListener('click', function() {
-                            localStorage.removeItem( draftKey ); notice.remove();
-                            form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) { el.value = ''; });
-                        });
-                    }
-                }
-                var saveTimer;
-                form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                    el.addEventListener('input', function() {
-                        clearTimeout(saveTimer);
-                        saveTimer = setTimeout(function() {
-                            var data = {};
-                            form.querySelectorAll('textarea, input[type="text"]').forEach(function(f) {
-                                if (f.name) data[f.name] = f.value;
-                            });
-                            try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
-                        }, 2000);
-                    });
-                });
-            }
-        }
-        var POST_MAX_BYTES = <?php echo (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ); ?>;
-        if ( form ) {
-            form.addEventListener('submit', function(e) {
-                var total = 0;
-                form.querySelectorAll('input[type="file"]').forEach(function(input) {
-                    Array.from(input.files || []).forEach(function(f) { total += f.size; });
-                });
-                if ( total > POST_MAX_BYTES * 0.9 ) {
-                    e.preventDefault();
-                    var errEl = document.getElementById('reflsub-upload-error');
-                    if ( !errEl ) {
-                        errEl = document.createElement('div'); errEl.id = 'reflsub-upload-error';
-                        errEl.className = 'reflection-notice reflection-error';
-                        form.querySelector('.reflection-submit').insertAdjacentElement('beforebegin', errEl);
-                    }
-                    errEl.innerHTML = '<p><strong>Images too large to upload.</strong> Your selected images total '
-                        + (total/1024/1024).toFixed(1) + ' MB — the limit is '
-                        + (POST_MAX_BYTES/1024/1024).toFixed(0) + ' MB. Remove some images and try again. '
-                        + '<em>Your text has not been lost.</em></p>';
-                    errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            });
-        }
-    })();
-    </script>
+    <?php reflsub_enqueue_form_assets(); ?>
     <?php
 
     return ob_get_clean();
@@ -1637,6 +1650,54 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <p class="reflection-hint">PDF only. Maximum 15 MB.</p>
             </div>
 
+            <?php elseif ( $type === 'audio' ) :
+                $audio_required = ! empty( $sec['required'] );
+                $audio_max_min  = max( 1, min( 30, intval( $sec['max_minutes'] ?? 5 ) ) );
+                $audio_max_sec  = $audio_max_min * 60;
+                // In edit mode, look up the previously attached audio recording.
+                $existing_audio = null;
+                if ( $edit_post_id ) {
+                    $existing_audios = get_posts( array(
+                        'post_type'      => 'attachment',
+                        'post_parent'    => $edit_post_id,
+                        'post_mime_type' => 'audio',
+                        'posts_per_page' => 1,
+                        'post_status'    => 'inherit',
+                        'orderby'        => 'date',
+                        'order'          => 'DESC',
+                    ) );
+                    $existing_audio = ! empty( $existing_audios ) ? $existing_audios[0] : null;
+                }
+            ?>
+            <div class="reflection-field">
+                <label>
+                    Audio response
+                    <?php if ( $audio_required ) : ?><span style="color:#d63638;" aria-label="required">*</span><?php endif; ?>
+                </label>
+                <div class="reflsub-audio-recorder"
+                     data-max-seconds="<?php echo esc_attr( $audio_max_sec ); ?>"
+                     data-required="<?php echo $audio_required ? '1' : '0'; ?>">
+                    <?php if ( $existing_audio ) : ?>
+                    <div class="reflsub-audio-existing">
+                        <p class="reflection-hint" style="margin-bottom:.5em;">Current recording — record again to replace it.</p>
+                        <audio controls preload="metadata" src="<?php echo esc_url( wp_get_attachment_url( $existing_audio->ID ) ); ?>"></audio>
+                        <input type="hidden" name="reflsub_keep_audio_id" value="<?php echo esc_attr( $existing_audio->ID ); ?>">
+                    </div>
+                    <?php endif; ?>
+                    <div class="reflsub-audio-controls">
+                        <button type="button" class="button reflsub-audio-record">● Record</button>
+                        <button type="button" class="button reflsub-audio-stop" hidden>■ Stop</button>
+                        <button type="button" class="button reflsub-audio-rerecord" hidden>↻ Re-record</button>
+                        <span class="reflsub-audio-timer" aria-live="polite">0:00</span>
+                    </div>
+                    <p class="reflsub-audio-status reflection-hint">
+                        Click <strong>Record</strong> and allow microphone access. Maximum length <?php echo esc_html( $audio_max_min ); ?>:00.
+                    </p>
+                    <audio class="reflsub-audio-playback" controls preload="metadata" hidden></audio>
+                    <input type="file" class="reflsub-audio-input" name="section_audio" accept="audio/*" hidden>
+                </div>
+            </div>
+
             <?php elseif ( $type === 'tags' ) : ?>
             <div class="reflection-field">
                 <label for="section_tags_<?php echo $i; ?>">
@@ -1878,6 +1939,24 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             box-shadow: 0 1px 3px rgba(0,0,0,.35);
         }
         .reflsub-existing-wrap:hover .reflsub-existing-remove { opacity: 1; }
+        .reflsub-audio-recorder {
+            border: 1px solid #d0d2d6;
+            border-radius: 8px;
+            background: #f9f9f9;
+            padding: 1rem 1.25rem;
+        }
+        .reflsub-audio-existing { margin-bottom: .75rem; padding-bottom: .75rem; border-bottom: 1px solid #e4e6e8; }
+        .reflsub-audio-existing audio,
+        .reflsub-audio-playback { width: 100%; margin-top: .35rem; }
+        .reflsub-audio-controls { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+        .reflsub-audio-record { color: #fff !important; background: #ff4128 !important; border-color: #e03014 !important; }
+        .reflsub-audio-record:hover { background: #e03014 !important; }
+        .reflsub-audio-record:disabled { background: #c3c4c7 !important; border-color: #c3c4c7 !important; }
+        .reflsub-audio-timer {
+            font-variant-numeric: tabular-nums; font-weight: 600; color: #1b28b4;
+            margin-left: auto;
+        }
+        .reflsub-audio-status { margin: .6rem 0 0; }
         .reflsub-drop-zone {
             position: relative;
             border: 2px dashed #c3c4c7;
@@ -2010,380 +2089,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
     </style>
 
-    <script>
-    (function() {
-        var MAX_FILE_MB = 15;
-        var MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
-
-        // ── Word counters ──────────────────────────────────────────────────────
-        document.querySelectorAll('.reflection-form textarea[data-word-limit]').forEach(function(ta) {
-            var limit   = parseInt(ta.dataset.wordLimit, 10);
-            var counter = document.getElementById(ta.dataset.counterId);
-            if (!counter || !limit) return;
-            function update() {
-                var words = ta.value.trim() === '' ? 0 : ta.value.trim().split(/\s+/).length;
-                counter.textContent = words + ' / ' + limit + ' words';
-                counter.style.color = words > limit ? '#d63638' : '#646970';
-            }
-            ta.addEventListener('input', update);
-            update();
-        });
-
-        // ── LocalStorage autosave ─────────────────────────────────────────────
-        var form     = document.querySelector('.reflection-form[data-page-id]');
-        // Key is scoped to both page and logged-in user — prevents draft leaking
-        // between users on shared machines / lab computers.
-        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId + '_' + form.dataset.userId : null;
-        // Clean up any legacy un-scoped key left by earlier builds.
-        if ( form ) { try { localStorage.removeItem( 'reflsub_draft_' + form.dataset.pageId ); } catch(e) {} }
-
-        if ( draftKey ) {
-            if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
-                // Successful submit — wipe the draft
-                localStorage.removeItem( draftKey );
-            } else {
-                // Restore draft if one exists
-                var saved = null;
-                try { saved = JSON.parse( localStorage.getItem( draftKey ) ); } catch(e) {}
-                if ( saved && Object.keys(saved).length ) {
-                    var anyRestored = false;
-                    Object.keys(saved).forEach(function(name) {
-                        var el = form.querySelector('[name="' + name + '"]');
-                        if ( el && ( el.tagName === 'TEXTAREA' || ( el.tagName === 'INPUT' && el.type === 'text' ) ) ) {
-                            el.value = saved[name];
-                            anyRestored = true;
-                        }
-                    });
-                    if ( anyRestored ) {
-                        var notice = document.createElement('div');
-                        notice.className = 'reflection-notice reflection-info';
-                        notice.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1.5rem;';
-                        notice.innerHTML = '<p style="margin:0;"><strong>Draft restored.</strong> Your previous text was saved automatically and has been filled in.</p>'
-                            + '<button type="button" style="background:none;border:none;color:#2271b1;cursor:pointer;white-space:nowrap;padding:0;font-size:0.9rem;flex-shrink:0;text-decoration:underline;">Discard &amp; start fresh</button>';
-                        form.parentNode.insertBefore( notice, form );
-                        notice.querySelector('button').addEventListener('click', function() {
-                            localStorage.removeItem( draftKey );
-                            notice.remove();
-                            form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) { el.value = ''; });
-                        });
-                    }
-                }
-
-                // Save on input, debounced 2 s
-                var saveTimer;
-                function reflsubSaveDraft() {
-                    var data = {};
-                    form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                        if ( el.name ) data[el.name] = el.value;
-                    });
-                    try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
-                }
-                form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                    el.addEventListener('input', function() {
-                        clearTimeout(saveTimer);
-                        saveTimer = setTimeout( reflsubSaveDraft, 2000 );
-                    });
-                });
-            }
-        }
-
-        // ── Total upload size guard ────────────────────────────────────────────
-        // Catches oversized POSTs client-side so the text fields are never wiped.
-        var POST_MAX_BYTES = <?php echo (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ); ?>;
-        if ( form ) {
-            form.addEventListener('submit', function(e) {
-                var total = 0;
-                form.querySelectorAll('input[type="file"]').forEach(function(input) {
-                    Array.from(input.files || []).forEach(function(f) { total += f.size; });
-                });
-                // Use 90 % of post_max_size to leave room for text fields in the request body
-                if ( total > POST_MAX_BYTES * 0.9 ) {
-                    e.preventDefault();
-                    var errEl = document.getElementById('reflsub-upload-error');
-                    if ( !errEl ) {
-                        errEl = document.createElement('div');
-                        errEl.id = 'reflsub-upload-error';
-                        errEl.className = 'reflection-notice reflection-error';
-                        form.querySelector('.reflection-submit').insertAdjacentElement('beforebegin', errEl);
-                    }
-                    var mb    = ( total / 1024 / 1024 ).toFixed(1);
-                    var limit = ( POST_MAX_BYTES / 1024 / 1024 ).toFixed(0);
-                    errEl.innerHTML = '<p><strong>Images too large to upload.</strong> Your selected images total '
-                        + mb + ' MB — the upload limit is ' + limit + ' MB. '
-                        + 'Please remove some images and try again. '
-                        + '<em>Your written text has not been lost.</em></p>';
-                    errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            });
-        }
-
-        // ── Drag-and-drop image zones ──────────────────────────────────────────
-        // Exposed globally so dynamically-injected student image blocks can wire
-        // up their own drop zones via window.reflsubSetupDropZone(zone).
-        window.reflsubSetupDropZone = function(zone) {
-            if (zone.dataset.reflsubInitialised === '1') return;
-            zone.dataset.reflsubInitialised = '1';
-
-            var input         = zone.querySelector('.reflsub-drop-input');
-            var previews      = zone.querySelector('.reflsub-drop-previews');
-            var acceptedFiles = []; // accumulates files across multiple drops/selects
-
-            function rebuildInput() {
-                var dt = new DataTransfer();
-                acceptedFiles.forEach(function(f) { dt.items.add(f); });
-                input.files = dt.files;
-            }
-
-            function updateCount() {
-                var countEl = zone.querySelector('.reflsub-drop-count');
-                if (!countEl) {
-                    countEl = document.createElement('p');
-                    countEl.className = 'reflsub-drop-count';
-                    zone.appendChild(countEl);
-                }
-                if (acceptedFiles.length) {
-                    countEl.textContent = acceptedFiles.length + ' image' + (acceptedFiles.length > 1 ? 's' : '') + ' ready to upload';
-                    zone.classList.add('has-files');
-                } else {
-                    countEl.textContent = '';
-                    zone.classList.remove('has-files');
-                }
-            }
-
-            function addPreview(file, idx) {
-                var wrap = document.createElement('div');
-                wrap.className = 'reflsub-preview-wrap';
-                wrap.dataset.idx = idx;
-
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    var img = document.createElement('img');
-                    img.src = e.target.result;
-                    img.alt = file.name;
-                    wrap.appendChild(img);
-                };
-                reader.readAsDataURL(file);
-
-                var btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'reflsub-preview-remove';
-                btn.setAttribute('aria-label', 'Remove ' + file.name);
-                btn.innerHTML = '&times;';
-                btn.addEventListener('click', function() {
-                    var i = parseInt(wrap.dataset.idx, 10);
-                    acceptedFiles.splice(i, 1);
-                    wrap.remove();
-                    // Re-index remaining wraps
-                    previews.querySelectorAll('.reflsub-preview-wrap').forEach(function(w, newIdx) {
-                        w.dataset.idx = newIdx;
-                    });
-                    rebuildInput();
-                    updateCount();
-                });
-                wrap.appendChild(btn);
-                previews.appendChild(wrap);
-            }
-
-            function addFiles(files) {
-                var rejected = [];
-                Array.from(files).forEach(function(f) {
-                    if (f.size > MAX_FILE_BYTES) {
-                        rejected.push(f.name + ' (' + (f.size / 1024 / 1024).toFixed(1) + ' MB)');
-                        return;
-                    }
-                    // Deduplicate by name + size
-                    var dupe = acceptedFiles.some(function(a) {
-                        return a.name === f.name && a.size === f.size;
-                    });
-                    if (dupe) return;
-
-                    var idx = acceptedFiles.length;
-                    acceptedFiles.push(f);
-                    addPreview(f, idx);
-                });
-                if (rejected.length) {
-                    alert('The following file(s) exceed the 15 MB limit and were not added:\n\n' + rejected.join('\n'));
-                }
-                zone.classList.remove('is-over');
-                rebuildInput();
-                updateCount();
-            }
-
-            // File input change
-            input.addEventListener('change', function() {
-                if (input.files.length) {
-                    addFiles(input.files);
-                    // Reset so the same file can be re-added after removal,
-                    // then immediately restore the accumulated files so they
-                    // are present when the form is submitted.
-                    input.value = '';
-                    rebuildInput();
-                }
-            });
-
-            // Drag events
-            zone.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                zone.classList.add('is-over');
-            });
-            zone.addEventListener('dragleave', function(e) {
-                if (!zone.contains(e.relatedTarget)) {
-                    zone.classList.remove('is-over');
-                }
-            });
-            zone.addEventListener('drop', function(e) {
-                e.preventDefault();
-                zone.classList.remove('is-over');
-                if (e.dataTransfer.files.length) {
-                    addFiles(e.dataTransfer.files);
-                }
-            });
-        };
-
-        // Initial scan: bind any pre-rendered drop zones.
-        document.querySelectorAll('.reflsub-drop-zone').forEach(function(zone) {
-            window.reflsubSetupDropZone(zone);
-        });
-
-        // ── Existing-image removal (edit mode) ────────────────────────────────
-        document.querySelectorAll('.reflsub-existing-wrap').forEach(function(wrap) {
-            var container = wrap.closest('.reflsub-existing-images');
-            var btn = wrap.querySelector('.reflsub-existing-remove');
-            if (!btn) return;
-            btn.addEventListener('click', function() {
-                var hidden = document.getElementById('reflsub-keep-' + wrap.dataset.imgId);
-                if (hidden) hidden.remove();
-                wrap.remove();
-                // Hide the whole section if all existing images were removed
-                if (container && !container.querySelector('.reflsub-existing-wrap')) {
-                    container.style.display = 'none';
-                }
-            });
-        });
-
-    })();
-
-    // ── Student-added blocks palette ───────────────────────────────────────
-    (function() {
-        var container = document.getElementById('reflsub-student-blocks');
-        var palette   = document.querySelector('.reflsub-student-palette');
-        var hidden    = document.getElementById('reflsub-student-blocks-data');
-        var form      = document.querySelector('.reflection-form');
-        if (!container || !palette || !hidden || !form) return;
-
-        // Seed from data-next-id so dynamic IDs don't collide with server-rendered blocks.
-        var nextId = parseInt(container.dataset.nextId, 10) || 1;
-
-        var LABELS = {
-            text:  'Paragraph',
-            image: 'Image(s)',
-            video: 'Video URL',
-            embed: 'Embed',
-            pdf:   'PDF / File'
-        };
-
-        function buildBlock(type) {
-            var id    = nextId++;
-            var block = document.createElement('div');
-            block.className    = 'reflsub-student-block';
-            block.dataset.type = type;
-            block.dataset.id   = id;
-
-            var body = '';
-            if (type === 'text') {
-                body = '<textarea rows="5" class="reflsub-student-text" '
-                     + 'placeholder="Write your paragraph…  (Leave a blank line between paragraphs.)"></textarea>';
-            } else if (type === 'video') {
-                body = '<input type="url" class="reflsub-student-video" '
-                     + 'placeholder="https://www.youtube.com/watch?v=…">'
-                     + '<p class="reflection-hint">Paste a YouTube or Vimeo URL — it will embed in your post.</p>';
-            } else if (type === 'embed') {
-                body = '<textarea rows="4" class="reflsub-student-embed" '
-                     + 'placeholder="Paste your &lt;iframe&gt; embed code here — Kaltura, YouTube, Vimeo, etc."></textarea>'
-                     + '<p class="reflection-hint">Only <code>&lt;iframe&gt;</code> tags are accepted; other HTML will be stripped.</p>';
-            } else if (type === 'image') {
-                body =
-                    '<div class="reflsub-drop-zone">'
-                        + '<div class="reflsub-drop-inner">'
-                            + '<span class="reflsub-drop-icon" aria-hidden="true">🖼️</span>'
-                            + '<p class="reflsub-drop-label">Drag &amp; drop images here</p>'
-                            + '<p class="reflsub-drop-sub">or <label class="reflsub-drop-browse" for="reflsub-student-image-' + id + '">choose files</label></p>'
-                        + '</div>'
-                        + '<input type="file" id="reflsub-student-image-' + id + '" '
-                        + 'name="reflsub_student_image_' + id + '[]" '
-                        + 'accept="image/jpeg,image/png,image/gif,image/webp" multiple '
-                        + 'class="reflsub-drop-input" aria-label="Upload images">'
-                        + '<div class="reflsub-drop-previews"></div>'
-                    + '</div>'
-                    + '<p class="reflection-hint">JPEG, PNG, GIF, WebP — max 15 MB per file. Multiple images display as a gallery.</p>';
-            } else if (type === 'pdf') {
-                body = '<input type="file" name="reflsub_student_pdf_' + id + '" '
-                     + 'accept=".pdf,application/pdf">'
-                     + '<p class="reflection-hint">PDF only. Max 15 MB.</p>';
-            }
-
-            block.innerHTML =
-                '<div class="reflsub-student-block-header">' +
-                    '<span class="reflsub-student-block-label">' + (LABELS[type] || type) + '</span>' +
-                    '<button type="button" class="reflsub-student-block-remove" aria-label="Remove this block">&times; Remove</button>' +
-                '</div>' + body;
-
-            // Remove handler is wired via event delegation on the container below,
-            // so it works for both JS-built and server-rendered (edit-mode) blocks.
-
-            return block;
-        }
-
-        // Delegated Remove-button handler — covers server-rendered blocks too.
-        container.addEventListener('click', function(e) {
-            var btn = e.target.closest('.reflsub-student-block-remove');
-            if (!btn || !container.contains(btn)) return;
-            var block = btn.closest('.reflsub-student-block');
-            if (block) block.remove();
-        });
-
-        palette.querySelectorAll('.reflsub-student-add-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var block = buildBlock(btn.dataset.blockType);
-                container.appendChild(block);
-                // Wire up the drag-drop zone if this is an image block.
-                var zone = block.querySelector('.reflsub-drop-zone');
-                if (zone && typeof window.reflsubSetupDropZone === 'function') {
-                    window.reflsubSetupDropZone(zone);
-                }
-                var first = block.querySelector('textarea, input[type="url"]');
-                if (first) first.focus();
-            });
-        });
-
-        // JSON.stringify that preserves non-ASCII as real UTF-8 instead of
-        // \uXXXX escapes — keeps PHP's wp_unslash from eating the backslash.
-        function jsonStringifyUtf8(data) {
-            return JSON.stringify(data).replace(/\\u([0-9a-fA-F]{4})/g, function(_, hex) {
-                return String.fromCharCode(parseInt(hex, 16));
-            });
-        }
-
-        form.addEventListener('submit', function() {
-            var blocks = [];
-            container.querySelectorAll('.reflsub-student-block').forEach(function(el) {
-                var type = el.dataset.type;
-                var id   = parseInt(el.dataset.id, 10);
-                var b    = { id: id, type: type };
-                if (type === 'text') {
-                    b.content = (el.querySelector('.reflsub-student-text')  || {}).value || '';
-                } else if (type === 'video') {
-                    b.content = (el.querySelector('.reflsub-student-video') || {}).value || '';
-                } else if (type === 'embed') {
-                    b.content = (el.querySelector('.reflsub-student-embed') || {}).value || '';
-                }
-                // image / pdf blocks carry no JSON content — files arrive via $_FILES
-                blocks.push(b);
-            });
-            hidden.value = jsonStringifyUtf8(blocks);
-        });
-    })();
-    </script>
+    <?php reflsub_enqueue_form_assets(); ?>
     <?php
 
     return ob_get_clean();
