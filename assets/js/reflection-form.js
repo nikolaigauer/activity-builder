@@ -279,7 +279,8 @@
             image: 'Image(s)',
             video: 'Video URL',
             embed: 'Embed',
-            pdf:   'PDF / File'
+            pdf:   'PDF / File',
+            audio: 'Audio'
         };
 
         function buildBlock(type) {
@@ -320,6 +321,13 @@
                 body = '<input type="file" name="reflsub_student_pdf_' + id + '" '
                      + 'accept=".pdf,application/pdf">'
                      + '<p class="reflection-hint">PDF only. Max 15 MB.</p>';
+            } else if (type === 'audio') {
+                // Controls are injected by reflsubSetupAudioRecorder(); we only supply
+                // the container + the (context-named) file input.
+                body =
+                    '<div class="reflsub-audio-recorder" data-max-seconds="300" data-required="0">'
+                        + '<input type="file" class="reflsub-audio-input" name="reflsub_student_audio_' + id + '" accept="audio/*" hidden>'
+                    + '</div>';
             }
 
             block.innerHTML =
@@ -351,6 +359,11 @@
                 if (zone && typeof window.reflsubSetupDropZone === 'function') {
                     window.reflsubSetupDropZone(zone);
                 }
+                // Wire up the audio recorder if this is an audio block.
+                var recorder = block.querySelector('.reflsub-audio-recorder');
+                if (recorder && typeof window.reflsubSetupAudioRecorder === 'function') {
+                    window.reflsubSetupAudioRecorder(recorder);
+                }
                 var first = block.querySelector('textarea, input[type="url"]');
                 if (first) first.focus();
             });
@@ -377,187 +390,38 @@
                 } else if (type === 'embed') {
                     b.content = (el.querySelector('.reflsub-student-embed') || {}).value || '';
                 }
-                // image / pdf blocks carry no JSON content — files arrive via $_FILES
+                // image / pdf / audio blocks carry no JSON content — files arrive via $_FILES
                 blocks.push(b);
             });
             hidden.value = jsonStringifyUtf8(blocks);
         });
     })();
 
-    // ── In-browser audio recorder (MediaRecorder) ────────────────────────────
+    // ── Required-audio guard ─────────────────────────────────────────────────
+    // The recorder widgets are wired up by assets/js/audio-recorder.js (shared).
+    // Here we only enforce instructor-marked "required" audio sections at submit
+    // time, since a native `required` attribute can't see a file input populated
+    // via DataTransfer. Recorders are re-queried at submit so student-added audio
+    // blocks are covered too (those are never required).
     (function() {
-        var recorders = document.querySelectorAll('.reflsub-audio-recorder');
-        if (!recorders.length) return;
         var form = document.querySelector('.reflection-form');
-
-        function fmt(sec) {
-            var m = Math.floor(sec / 60), s = sec % 60;
-            return m + ':' + (s > 9 ? '' : '0') + s;
-        }
-
-        // Pick a MIME type the browser can actually record. Chrome/Firefox → webm,
-        // Safari/iOS → mp4. Returns { mime, ext } or null to use the browser default.
-        function pickMime() {
-            if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return null;
-            var candidates = [
-                { mime: 'audio/webm', ext: 'webm' },
-                { mime: 'audio/ogg',  ext: 'ogg'  },
-                { mime: 'audio/mp4',  ext: 'mp4'  }
-            ];
-            for (var i = 0; i !== candidates.length; i++) {
-                if (MediaRecorder.isTypeSupported(candidates[i].mime)) return candidates[i];
-            }
-            return null;
-        }
-
-        function extFor(mime) {
-            if (!mime) return 'webm';
-            if (mime.indexOf('webm') > -1) return 'webm';
-            if (mime.indexOf('ogg')  > -1) return 'ogg';
-            if (mime.indexOf('mp4')  > -1 || mime.indexOf('mpeg') > -1) return 'mp4';
-            return 'webm';
-        }
-
-        recorders.forEach(function(box) {
-            var maxSeconds = parseInt(box.dataset.maxSeconds, 10) || 300;
-            var recordBtn  = box.querySelector('.reflsub-audio-record');
-            var stopBtn    = box.querySelector('.reflsub-audio-stop');
-            var reBtn      = box.querySelector('.reflsub-audio-rerecord');
-            var timerEl    = box.querySelector('.reflsub-audio-timer');
-            var statusEl   = box.querySelector('.reflsub-audio-status');
-            var playback   = box.querySelector('.reflsub-audio-playback');
-            var input      = box.querySelector('.reflsub-audio-input');
-            var existing   = box.querySelector('.reflsub-audio-existing');
-
-            var mediaRecorder = null, chunks = [], stream = null;
-            var ticker = null, elapsed = 0, objectUrl = null;
-
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia ||
-                typeof MediaRecorder === 'undefined') {
-                statusEl.textContent = 'Audio recording isn’t supported in this browser. Try a recent Chrome, Firefox, Edge, or Safari.';
-                recordBtn.disabled = true;
-                return;
-            }
-
-            function resetTimer() {
-                elapsed = 0;
-                timerEl.textContent = '0:00';
-            }
-
-            function stopTracks() {
-                if (stream) { stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
-            }
-
-            function startTicker() {
-                ticker = setInterval(function() {
-                    elapsed++;
-                    timerEl.textContent = fmt(elapsed) + ' / ' + fmt(maxSeconds);
-                    if (elapsed >= maxSeconds) stopRecording();
-                }, 1000);
-            }
-
-            function stopRecording() {
-                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                    mediaRecorder.stop();
+        if (!form) return;
+        form.addEventListener('submit', function(e) {
+            var recorders = document.querySelectorAll('.reflsub-audio-recorder');
+            for (var i = 0; i !== recorders.length; i++) {
+                var box = recorders[i];
+                if (box.dataset.required !== '1') continue;
+                var input      = box.querySelector('.reflsub-audio-input');
+                var existingEl = box.querySelector('.reflsub-audio-existing');
+                var keptVisible = box.querySelector('input[name="reflsub_keep_audio_id"]') &&
+                                  existingEl && existingEl.style.display !== 'none';
+                if ((!input || !input.files || !input.files.length) && !keptVisible) {
+                    e.preventDefault();
+                    var status = box.querySelector('.reflsub-audio-status');
+                    if (status) status.textContent = 'An audio recording is required before you can submit.';
+                    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
                 }
             }
-
-            recordBtn.addEventListener('click', function() {
-                navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
-                    stream = s;
-                    chunks = [];
-                    var picked = pickMime();
-                    try {
-                        mediaRecorder = picked ? new MediaRecorder(stream, { mimeType: picked.mime })
-                                               : new MediaRecorder(stream);
-                    } catch (e) {
-                        mediaRecorder = new MediaRecorder(stream);
-                    }
-
-                    mediaRecorder.ondataavailable = function(ev) {
-                        if (ev.data && ev.data.size > 0) chunks.push(ev.data);
-                    };
-
-                    mediaRecorder.onstop = function() {
-                        clearInterval(ticker);
-                        stopTracks();
-                        var mime = mediaRecorder.mimeType || (picked ? picked.mime : 'audio/webm');
-                        var blob = new Blob(chunks, { type: mime });
-
-                        if (objectUrl) URL.revokeObjectURL(objectUrl);
-                        objectUrl = URL.createObjectURL(blob);
-                        playback.src = objectUrl;
-                        playback.hidden = false;
-
-                        // Hand the blob to the file input via DataTransfer so it rides
-                        // the normal multipart submit as $_FILES['section_audio'].
-                        var file = new File([blob], 'recording.' + extFor(mime), { type: mime });
-                        var dt = new DataTransfer();
-                        dt.items.add(file);
-                        input.files = dt.files;
-
-                        // A fresh recording supersedes any kept recording from edit mode.
-                        if (existing) existing.style.display = 'none';
-
-                        recordBtn.hidden = true;
-                        stopBtn.hidden   = true;
-                        reBtn.hidden     = false;
-                        var kb = Math.round(blob.size / 1024);
-                        statusEl.textContent = 'Recorded ' + fmt(elapsed) + ' (' +
-                            (kb > 1024 ? (kb/1024).toFixed(1) + ' MB' : kb + ' KB') +
-                            '). Play it back above, or re-record.';
-                    };
-
-                    resetTimer();
-                    mediaRecorder.start();
-                    startTicker();
-                    recordBtn.hidden = true;
-                    stopBtn.hidden   = false;
-                    reBtn.hidden     = true;
-                    playback.hidden  = true;
-                    statusEl.textContent = 'Recording… click Stop when you’re done.';
-                }).catch(function(err) {
-                    statusEl.textContent = (err && err.name === 'NotAllowedError')
-                        ? 'Microphone access was blocked. Allow it in your browser’s address-bar permissions, then try again.'
-                        : 'Could not start recording: ' + (err && err.message ? err.message : 'unknown error') + '.';
-                });
-            });
-
-            stopBtn.addEventListener('click', stopRecording);
-
-            reBtn.addEventListener('click', function() {
-                // Clear the captured recording and return to the initial state.
-                if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
-                playback.hidden = true;
-                playback.removeAttribute('src');
-                input.value = '';
-                try { input.files = new DataTransfer().files; } catch (e) {}
-                resetTimer();
-                reBtn.hidden     = true;
-                recordBtn.hidden = false;
-                statusEl.textContent = 'Click Record and allow microphone access. Maximum length ' + fmt(maxSeconds) + '.';
-            });
         });
-
-        // Required-recording guard at submit time (native `required` can't see a
-        // JS-assigned file input).
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                for (var i = 0; i !== recorders.length; i++) {
-                    var box = recorders[i];
-                    if (box.dataset.required !== '1') continue;
-                    var input = box.querySelector('.reflsub-audio-input');
-                    var kept  = box.querySelector('input[name="reflsub_keep_audio_id"]');
-                    var keptVisible = kept && box.querySelector('.reflsub-audio-existing') &&
-                                      box.querySelector('.reflsub-audio-existing').style.display !== 'none';
-                    if ((!input.files || !input.files.length) && !keptVisible) {
-                        e.preventDefault();
-                        var status = box.querySelector('.reflsub-audio-status');
-                        if (status) status.textContent = 'An audio recording is required before you can submit.';
-                        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        return;
-                    }
-                }
-            });
-        }
     })();

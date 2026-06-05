@@ -4,6 +4,37 @@ Ideas and future directions parked here for reference. Not committed to any time
 
 ---
 
+## Edit-mode media retention (known bug + design, 2026-06-05)
+
+**Symptom:** A student returning to edit a submitted post loses the original audio recording —
+the existing take isn't retrieved, so even with no edits they can't resubmit (required audio
+blocks; the audio is dropped from content).
+
+**Confirmed root cause:** the edit-mode "existing recording" lookup queries
+`post_mime_type => 'audio'` (`reflection-form.php`), but browser recordings are stored as
+**`video/webm` / `video/mp4`** — webm and mp4 are containers WP types as *video* even when
+audio-only. The query matches nothing → no existing block rendered → no keep input → audio lost.
+Images (`image/*`) and PDFs (`application/pdf`) are unaffected because their mimes are reliable.
+
+**Robust fix (preferred):** stop querying by mime. The saved post content already carries the
+attachment id in its block markup (e.g. `wp:audio {"id":118}`, `wp:image {"id":…}`,
+`wp:file {"id":…}`). On edit, parse `post_content` for those block ids — single source of truth,
+immune to mime quirks, uniform across media types.
+- Cheaper stopgap: broaden the audio query to `array('audio','video/webm','video/mp4','video/ogg')`.
+
+**"Only drop when the user decides":** once retrieval is reliable, each existing media block in
+edit mode should render the media + a hidden *keep* input (preserve if untouched) + an explicit
+**× Remove** control (drop only on deliberate action). Images already do this; audio + PDF only
+support "replace or keep" today and need the explicit remove affordance.
+
+**Deeper refactor opportunity:** replace the per-type ad-hoc keep logic
+(`reflsub_keep_image_ids` / `reflsub_keep_pdf_id` / `reflsub_keep_audio_id` + 3 separate queries)
+with ONE "existing media" layer: parse blocks → {type, attachment_id, position} → uniform
+keep+remove UI → on save, preserve untouched slots in place, re-upload only changed ones. Collapses
+duplicated code and makes the next media type trivial.
+
+---
+
 ## Feature Requests (2026-06-03)
 
 Incoming from instructors using the Writing Centre deployment.
@@ -271,27 +302,39 @@ payoff for any student who opens "Edit Post" after submitting.
 
 ---
 
-## TipTap-based rich text editor (large, exploratory)
+## Rich text in student submissions — Trix (v1.2.0, DECIDED 2026-06-05)
 
-Replace the current plain `<textarea>` inputs in the page builder (instructor side) with
-a [TipTap](https://tiptap.dev/) editor for prompt copy, intro text, and re-reflect headings —
-giving instructors inline bold/italic/links/lists without leaving the builder UI.
+Give students optional inline formatting (bold/italic/links/lists/headings/quote) in
+submission text — useful for reflective writing and for playing with text/poetry. Not a
+need; a deliberate, contained nice-to-have.
 
-Optionally make the same editor available to students for paragraph blocks in the
-submission form, gated by a per-page toggle (so instructors can choose plain text for
-short-form prompts and rich text for longer reflective writing).
+**Editor choice: [Trix](https://trix-editor.org/), NOT TipTap.** TipTap is ProseMirror/ESM and
+assumes a bundler — adopting it means adding a build toolchain, which breaks the plugin's
+deliberate **no-build, zero-dependency** character (its biggest virtue; see ACF removal). Trix
+is a single `trix.js` + `trix.css`, no build, drop into `assets/` and enqueue exactly like
+`audio-recorder.js`. It emits clean semantic HTML and is purpose-built for comment/submission
+boxes. (Quill was runner-up but stores its own "Delta" JSON → extra conversion glue.)
 
-Considerations:
-- TipTap is ProseMirror-based, modular, framework-agnostic — bundles cleanly without React
-- Serialization format choice matters: HTML round-trips into Gutenberg paragraph blocks
-  naturally; JSON would need a converter. Probably store as constrained HTML.
-- Sanitization: the existing `wp_kses` whitelist approach extends naturally — define an
-  allowed-tags set that matches what TipTap can produce
-- Bundle size: TipTap + ProseMirror is ~100kb minified — acceptable for the builder,
-  worth more thought before loading on every student form
-- Conflict surface: WordPress already ships TinyMCE and Gutenberg. Adding a third
-  editor is a deliberate choice — justify it by the friction it removes for instructors
-  composing prompts and the consistency of UI between prompt config and submission
+**Scope for v1.2.0 — start simple:**
+- **Student submissions only** (skip the instructor prompt-authoring idea above for now —
+  one surface at a time).
+- **Per-page toggle** to begin (`_reflsub_*` page meta, e.g. `_reflsub_allow_rich_text`), set in
+  the Activity Page builder. Per-prompt-section granularity is a later refinement.
+- **Off by default.** When enabled, the student textarea gets a "Format ✨" button that swaps in
+  the Trix editor on demand (student opt-in).
+
+**Design principles (keep complexity contained):**
+- **Textarea stays the source of truth.** Trix syncs its HTML back into the hidden/real textarea
+  on change. If the script fails to load or the student never opts in, plain text submits
+  normally. Purely additive, progressive enhancement.
+- **Sanitize hard on save.** Run the HTML through `wp_kses` with a tight allowlist
+  (`strong/em/u`, `a[href]`, `ul/ol/li`, `h3/h4`, `blockquote`, `br`) — extend the existing
+  `reflsub_sanitize_embed_code` allowlist pattern. Never trust client HTML.
+- **Serialization:** wrap the sanitized HTML into block markup (`wp:paragraph` / `wp:list` /
+  `wp:heading` / `wp:quote`) — paragraphs allow inline formatting natively.
+- **Touchpoints to handle:** localStorage autosave would store HTML; the word-counter should
+  count `textContent` not markup; edit-mode round-trip loads saved HTML back into Trix.
+- Enqueue the same way as the audio recorder (own `assets/` files, `filemtime()` versioning).
 
 ---
 

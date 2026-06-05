@@ -1,0 +1,75 @@
+/**
+ * Activity Builder — shared styles for the in-browser audio recorder widget.
+ * Enqueued anywhere reflsubSetupAudioRecorder() is used: the activity form
+ * (instructor section + student tools) and the standalone New Post builder.
+ * Controls are injected by audio-recorder.js; these style them consistently
+ * across the front-end form and the wp-admin New Post builder.
+ */
+.reflsub-audio-recorder {
+    border: 1px solid #d0d2d6;
+    border-radius: 8px;
+    background: #f9f9f9;
+    padding: 1rem 1.25rem;
+}
+.reflsub-audio-existing { margin-bottom: .75rem; padding-bottom: .75rem; border-bottom: 1px solid #e4e6e8; }
+.reflsub-audio-existing audio,
+.reflsub-audio-playback { width: 100%; margin-top: .6rem; }
+.reflsub-audio-controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+
+/* Single toggle button — comfortably large, consistent in both contexts. */
+.reflsub-audio-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .6rem 1.1rem;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #fff;
+    background: #ff4128;
+    border: 1px solid #e03014;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+}
+.reflsub-audio-toggle:hover { background: #e03014; border-color: #c72a10; }
+.reflsub-audio-toggle:focus-visible { outline: 2px solid #1b28b4; outline-offset: 2px; }
+.reflsub-audio-toggle:disabled { background: #c3c4c7; border-color: #c3c4c7; cursor: not-allowed; }
+/* While recording, shift to a calmer "stop" colour so state is obvious. */
+.reflsub-audio-toggle.is-recording { background: #1d2327; border-color: #1d2327; }
+.reflsub-audio-toggle.is-recording:hover { background: #000; border-color: #000; }
+
+/* Secondary "Re-record" button — appears once a take exists. */
+.reflsub-audio-rerecord {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .55rem 1rem;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #1b28b4;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.reflsub-audio-rerecord:hover { background: #f0f0f1; border-color: #8c8f94; }
+.reflsub-audio-rerecord:focus-visible { outline: 2px solid #1b28b4; outline-offset: 2px; }
+
+.reflsub-audio-timer {
+    font-variant-numeric: tabular-nums; font-weight: 600; color: #1b28b4;
+    margin-left: auto; font-size: 15px;
+}
+.reflsub-audio-status { margin: .6rem 0 0; font-size: 13px; color: #646970; }
+
+/* Upload fallback — a real picker for students who can't record or have a file ready. */
+.reflsub-audio-fallback {
+    margin: .85rem 0 0;
+    padding-top: .75rem;
+    border-top: 1px dashed #d0d2d6;
+    font-size: 13px;
+    color: #646970;
+}
+.reflsub-audio-fallback input[type="file"] { margin-top: .35rem; font-size: 13px; }

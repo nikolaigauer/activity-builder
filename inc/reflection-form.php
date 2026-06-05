@@ -62,20 +62,52 @@ function reflsub_allow_audio_mimes( $mimes ) {
 // actually output the form. Both render paths share this one element-guarded file.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Version string for a bundled asset: its file mtime, so browsers always pick up
+// edits (and deploys), falling back to the plugin version if the file is missing.
+function reflsub_asset_ver( $relpath ) {
+    $full = REFLSUB_DIR . ltrim( $relpath, '/' );
+    return file_exists( $full ) ? (string) filemtime( $full ) : REFLSUB_VERSION;
+}
+
 function reflsub_enqueue_form_assets() {
+    // Shared audio recorder widget (also used by the New Post builder).
+    reflsub_enqueue_audio_recorder();
+
     if ( wp_script_is( 'reflsub-reflection-form', 'enqueued' ) ) {
         return;
     }
     wp_enqueue_script(
         'reflsub-reflection-form',
         REFLSUB_URL . 'assets/js/reflection-form.js',
-        array(),
-        REFLSUB_VERSION,
+        array( 'reflsub-audio-recorder' ), // recorder widget loads first
+        reflsub_asset_ver( 'assets/js/reflection-form.js' ),
         true // in footer — runs after the form HTML is in the DOM
     );
     wp_localize_script( 'reflsub-reflection-form', 'reflsubForm', array(
         'postMaxBytes' => (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ),
     ) );
+}
+
+// Enqueue the shared audio recorder widget (JS + CSS). Safe to call repeatedly;
+// reused by both the activity form and the New Post builder (admin).
+function reflsub_enqueue_audio_recorder() {
+    if ( ! wp_script_is( 'reflsub-audio-recorder', 'enqueued' ) ) {
+        wp_enqueue_script(
+            'reflsub-audio-recorder',
+            REFLSUB_URL . 'assets/js/audio-recorder.js',
+            array(),
+            reflsub_asset_ver( 'assets/js/audio-recorder.js' ),
+            true
+        );
+    }
+    if ( ! wp_style_is( 'reflsub-audio-recorder', 'enqueued' ) ) {
+        wp_enqueue_style(
+            'reflsub-audio-recorder',
+            REFLSUB_URL . 'assets/css/audio-recorder.css',
+            array(),
+            reflsub_asset_ver( 'assets/css/audio-recorder.css' )
+        );
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,6 +307,20 @@ function reflsub_render_student_block( $block_id, $state ) {
             <?php endif; ?>
             <input type="file" name="reflsub_student_pdf_<?php echo (int) $block_id; ?>" accept=".pdf,application/pdf">
             <p class="reflection-hint">PDF only. Max 15 MB.</p>
+        <?php elseif ( $type === 'audio' ) :
+            $att_id    = intval( $state['id'] ?? 0 );
+            $audio_url = $att_id ? wp_get_attachment_url( $att_id ) : '';
+        ?>
+            <div class="reflsub-audio-recorder" data-max-seconds="300" data-required="0">
+                <?php if ( $att_id && $audio_url ) : ?>
+                <div class="reflsub-audio-existing">
+                    <p class="reflection-hint" style="margin-bottom:.5em;">Current recording — record again to replace it.</p>
+                    <audio controls preload="metadata" src="<?php echo esc_url( $audio_url ); ?>"></audio>
+                    <input type="hidden" name="reflsub_student_audio_<?php echo (int) $block_id; ?>_keep" value="<?php echo esc_attr( $att_id ); ?>">
+                </div>
+                <?php endif; ?>
+                <input type="file" class="reflsub-audio-input" name="reflsub_student_audio_<?php echo (int) $block_id; ?>" accept="audio/*" hidden>
+            </div>
         <?php endif; ?>
     </div>
     <?php
@@ -720,6 +766,14 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                     break;
                 }
             }
+            if ( $sb_type === 'audio' && $sb_id ) {
+                $audio_name = $_FILES[ 'reflsub_student_audio_' . $sb_id ]['name'] ?? '';
+                $kept       = intval( $_POST[ 'reflsub_student_audio_' . $sb_id . '_keep' ] ?? 0 );
+                if ( $audio_name !== '' || $kept > 0 ) {
+                    $has_content = true;
+                    break;
+                }
+            }
         }
     }
 
@@ -964,6 +1018,41 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                     esc_url( $pdf_url )
                 );
                 $student_state[] = array( 'type' => 'pdf', 'id' => $pdf_aid );
+            }
+        } elseif ( $sb_type === 'audio' && $sb_id ) {
+            $field     = 'reflsub_student_audio_' . $sb_id;
+            $audio_aid = 0;
+
+            // Try a new recording first; fall back to the kept recording if none was given.
+            if ( ! empty( $_FILES[ $field ]['name'] )
+                 && ( $_FILES[ $field ]['error'] ?? UPLOAD_ERR_NO_FILE ) === UPLOAD_ERR_OK
+                 && ( $_FILES[ $field ]['size'] ?? 0 ) <= 60 * 1024 * 1024 ) {
+                require_once ABSPATH . 'wp-admin/includes/image.php';
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+                require_once ABSPATH . 'wp-admin/includes/media.php';
+                $uploaded = media_handle_upload( $field, $post_id );
+                if ( ! is_wp_error( $uploaded ) ) {
+                    $audio_aid = $uploaded;
+                }
+            } else {
+                $kept = intval( $_POST[ $field . '_keep' ] ?? 0 );
+                if ( $kept ) {
+                    $att = get_post( $kept );
+                    if ( $att && $att->post_type === 'attachment'
+                         && (int) $att->post_parent === $post_id ) {
+                        $audio_aid = $kept;
+                    }
+                }
+            }
+
+            if ( $audio_aid ) {
+                $audio_url = wp_get_attachment_url( $audio_aid );
+                $ordered_parts[ $sort_k ] = sprintf(
+                    '<!-- wp:audio {"id":%d} --><figure class="wp-block-audio"><audio controls src="%s"></audio></figure><!-- /wp:audio -->',
+                    $audio_aid,
+                    esc_url( $audio_url )
+                );
+                $student_state[] = array( 'type' => 'audio', 'id' => $audio_aid );
             }
         }
     }
@@ -1684,16 +1773,6 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                         <input type="hidden" name="reflsub_keep_audio_id" value="<?php echo esc_attr( $existing_audio->ID ); ?>">
                     </div>
                     <?php endif; ?>
-                    <div class="reflsub-audio-controls">
-                        <button type="button" class="button reflsub-audio-record">● Record</button>
-                        <button type="button" class="button reflsub-audio-stop" hidden>■ Stop</button>
-                        <button type="button" class="button reflsub-audio-rerecord" hidden>↻ Re-record</button>
-                        <span class="reflsub-audio-timer" aria-live="polite">0:00</span>
-                    </div>
-                    <p class="reflsub-audio-status reflection-hint">
-                        Click <strong>Record</strong> and allow microphone access. Maximum length <?php echo esc_html( $audio_max_min ); ?>:00.
-                    </p>
-                    <audio class="reflsub-audio-playback" controls preload="metadata" hidden></audio>
                     <input type="file" class="reflsub-audio-input" name="section_audio" accept="audio/*" hidden>
                 </div>
             </div>
@@ -1819,6 +1898,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <button type="button" data-block-type="video" class="reflsub-student-add-btn">Video URL</button>
                 <button type="button" data-block-type="embed" class="reflsub-student-add-btn">Embed</button>
                 <button type="button" data-block-type="pdf"   class="reflsub-student-add-btn">PDF / File</button>
+                <button type="button" data-block-type="audio" class="reflsub-student-add-btn">Audio</button>
             </div>
             <input type="hidden" name="reflsub_student_blocks_data" id="reflsub-student-blocks-data" value="">
             <?php endif; ?>
@@ -1939,24 +2019,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             box-shadow: 0 1px 3px rgba(0,0,0,.35);
         }
         .reflsub-existing-wrap:hover .reflsub-existing-remove { opacity: 1; }
-        .reflsub-audio-recorder {
-            border: 1px solid #d0d2d6;
-            border-radius: 8px;
-            background: #f9f9f9;
-            padding: 1rem 1.25rem;
-        }
-        .reflsub-audio-existing { margin-bottom: .75rem; padding-bottom: .75rem; border-bottom: 1px solid #e4e6e8; }
-        .reflsub-audio-existing audio,
-        .reflsub-audio-playback { width: 100%; margin-top: .35rem; }
-        .reflsub-audio-controls { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-        .reflsub-audio-record { color: #fff !important; background: #ff4128 !important; border-color: #e03014 !important; }
-        .reflsub-audio-record:hover { background: #e03014 !important; }
-        .reflsub-audio-record:disabled { background: #c3c4c7 !important; border-color: #c3c4c7 !important; }
-        .reflsub-audio-timer {
-            font-variant-numeric: tabular-nums; font-weight: 600; color: #1b28b4;
-            margin-left: auto;
-        }
-        .reflsub-audio-status { margin: .6rem 0 0; }
+        /* Audio recorder styles live in assets/css/audio-recorder.css (shared). */
         .reflsub-drop-zone {
             position: relative;
             border: 2px dashed #c3c4c7;

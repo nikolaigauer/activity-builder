@@ -42,6 +42,10 @@ function reflsub_post_form_enqueue( $hook ) {
         return;
     }
     wp_enqueue_media();
+    // Shared in-browser audio recorder widget (JS + CSS). Defined in reflection-form.php.
+    if ( function_exists( 'reflsub_enqueue_audio_recorder' ) ) {
+        reflsub_enqueue_audio_recorder();
+    }
 }
 
 
@@ -163,6 +167,7 @@ function reflsub_render_post_form() {
                         <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('text')">Text</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('image')">Image(s)</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('pdf')">PDF / File</button>
+                        <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('audio')">Audio</button>
                         <button type="button" class="reflsub-add-btn" onclick="reflsubPostAddSection('embed')">Embed / URL</button>
                     </div>
                 </div>
@@ -477,8 +482,9 @@ function reflsub_render_post_form() {
             var div = document.createElement('div');
             div.className = 'reflsub-post-section';
             div.dataset.type = type;
+            div.dataset.id   = id;
 
-            var labels = { text: 'Text', image: 'Image(s)', pdf: 'PDF / File', embed: 'Embed / URL' };
+            var labels = { text: 'Text', image: 'Image(s)', pdf: 'PDF / File', audio: 'Audio', embed: 'Embed / URL' };
 
             var header = '<div class="reflsub-post-section-header">' +
                 '<div style="display:flex;align-items:center;gap:8px;">' +
@@ -516,6 +522,13 @@ function reflsub_render_post_form() {
                     '</div>' +
                     '<p style="margin:6px 0 0; font-size:12px; color:#64748b;">PDF, Word, or PowerPoint — max 15 MB.</p>';
             }
+            if (type === 'audio') {
+                // Controls are injected by reflsubSetupAudioRecorder(); we only supply
+                // the container + the (context-named) file input.
+                return '<div class="reflsub-audio-recorder" data-max-seconds="300" data-required="0">' +
+                    '<input type="file" class="reflsub-audio-input" name="reflsub_post_audio_' + id + '" accept="audio/*" hidden>' +
+                    '</div>';
+            }
             if (type === 'embed') {
                 return '<label style="font-size:12px; font-weight:600; color:#50575e; display:block; margin-bottom:4px;">URL or Embed Code</label>' +
                     '<textarea rows="3" class="reflsub-post-embed" placeholder="Paste a YouTube/Vimeo URL, or an &lt;iframe&gt; embed code…"></textarea>';
@@ -524,7 +537,13 @@ function reflsub_render_post_form() {
         }
 
         window.reflsubPostAddSection = function(type) {
-            document.getElementById('reflsub-post-sections').appendChild(buildPostSection(type));
+            var section = buildPostSection(type);
+            document.getElementById('reflsub-post-sections').appendChild(section);
+            // Wire up the audio recorder widget if this is an audio section.
+            var recorder = section.querySelector('.reflsub-audio-recorder');
+            if (recorder && typeof window.reflsubSetupAudioRecorder === 'function') {
+                window.reflsubSetupAudioRecorder(recorder);
+            }
         };
 
         window.reflsubPostRemoveSection = function(btn) {
@@ -599,6 +618,10 @@ function reflsub_render_post_form() {
                     sections.push({ type: 'image', ids: el.querySelector('.reflsub-image-ids').value });
                 } else if (type === 'embed') {
                     sections.push({ type: 'embed', content: el.querySelector('.reflsub-post-embed').value });
+                } else if (type === 'audio') {
+                    // audio file rides $_FILES; we serialize id only so PHP can
+                    // position the wp:audio block and match the uploaded file.
+                    sections.push({ type: 'audio', id: parseInt(el.dataset.id, 10) });
                 }
                 // pdf sections are handled via $_FILES — excluded from JSON
             });
@@ -732,6 +755,16 @@ function reflsub_handle_create_post() {
                 }
             }
         }
+
+        if ( $type === 'audio' ) {
+            // The recording rides $_FILES; leave a positioned placeholder that is
+            // swapped for a wp:audio block after the file is uploaded (we don't have
+            // the attachment id yet, since the post doesn't exist at this point).
+            $aud_id = intval( $sec['id'] ?? 0 );
+            if ( $aud_id ) {
+                $content_parts[] = '<!--REFLSUB_AUDIO_' . $aud_id . '-->';
+            }
+        }
     }
 
     $post_content = implode( "\n\n", $content_parts );
@@ -756,12 +789,15 @@ function reflsub_handle_create_post() {
         wp_set_post_tags( $post_id, $tags );
     }
 
-    // File uploads (PDF / File sections)
+    // File uploads (PDF / File + Audio sections)
+    $audio_map = array(); // section id => attachment id, for placeholder substitution
     if ( ! empty( $_FILES ) ) {
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
         foreach ( $_FILES as $key => $file ) {
-            if ( strpos( $key, 'reflsub_post_pdf_' ) !== 0 ) continue;
+            $is_pdf   = strpos( $key, 'reflsub_post_pdf_' ) === 0;
+            $is_audio = strpos( $key, 'reflsub_post_audio_' ) === 0;
+            if ( ! $is_pdf && ! $is_audio ) continue;
             if ( $file['error'] !== UPLOAD_ERR_OK || empty( $file['name'] ) ) continue;
             $upload = wp_handle_upload( $file, array( 'test_form' => false ) );
             if ( isset( $upload['file'] ) && ! isset( $upload['error'] ) ) {
@@ -773,8 +809,35 @@ function reflsub_handle_create_post() {
                 ), $upload['file'], $post_id );
                 if ( $att_id && ! is_wp_error( $att_id ) ) {
                     wp_update_attachment_metadata( $att_id, wp_generate_attachment_metadata( $att_id, $upload['file'] ) );
+                    if ( $is_audio ) {
+                        $audio_map[ (int) substr( $key, strlen( 'reflsub_post_audio_' ) ) ] = $att_id;
+                    }
                 }
             }
+        }
+    }
+
+    // Swap each audio placeholder for a playable wp:audio block (or drop it if the
+    // upload failed / no recording was made).
+    if ( strpos( $post_content, '<!--REFLSUB_AUDIO_' ) !== false ) {
+        $new_content = preg_replace_callback(
+            '/<!--REFLSUB_AUDIO_(\d+)-->/',
+            function ( $m ) use ( $audio_map ) {
+                $fid = (int) $m[1];
+                if ( empty( $audio_map[ $fid ] ) ) {
+                    return '';
+                }
+                $url = wp_get_attachment_url( $audio_map[ $fid ] );
+                return sprintf(
+                    '<!-- wp:audio {"id":%d} --><figure class="wp-block-audio"><audio controls src="%s"></audio></figure><!-- /wp:audio -->',
+                    $audio_map[ $fid ],
+                    esc_url( $url )
+                );
+            },
+            $post_content
+        );
+        if ( $new_content !== $post_content ) {
+            wp_update_post( array( 'ID' => $post_id, 'post_content' => $new_content ) );
         }
     }
 
