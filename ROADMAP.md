@@ -302,7 +302,7 @@ payoff for any student who opens "Edit Post" after submitting.
 
 ---
 
-## Rich text in student submissions — Trix (v1.2.0, DECIDED 2026-06-05)
+## Rich text in student submissions — Trix (v1.3.0, DECIDED 2026-06-05)
 
 Give students optional inline formatting (bold/italic/links/lists/headings/quote) in
 submission text — useful for reflective writing and for playing with text/poetry. Not a
@@ -315,7 +315,7 @@ is a single `trix.js` + `trix.css`, no build, drop into `assets/` and enqueue ex
 `audio-recorder.js`. It emits clean semantic HTML and is purpose-built for comment/submission
 boxes. (Quill was runner-up but stores its own "Delta" JSON → extra conversion glue.)
 
-**Scope for v1.2.0 — start simple:**
+**Scope for v1.3.0 — start simple:**
 - **Student submissions only** (skip the instructor prompt-authoring idea above for now —
   one surface at a time).
 - **Per-page toggle** to begin (`_reflsub_*` page meta, e.g. `_reflsub_allow_rich_text`), set in
