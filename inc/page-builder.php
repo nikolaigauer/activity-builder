@@ -92,6 +92,54 @@ function reflsub_render_pages_list() {
         }
     }
 
+    // Handle duplicate action — clones the activity *definition* only (never submissions),
+    // lands as a Draft titled "… (Copy)" so the instructor edits before publishing.
+    if (
+        isset( $_GET['reflsub_duplicate'] ) &&
+        isset( $_GET['_wpnonce'] ) &&
+        wp_verify_nonce( $_GET['_wpnonce'], 'reflsub_duplicate_page_' . intval( $_GET['reflsub_duplicate'] ) )
+    ) {
+        $src_id = intval( $_GET['reflsub_duplicate'] );
+        $source = $src_id ? get_post( $src_id ) : null;
+
+        if ( $source && $source->post_type === 'page' && current_user_can( 'edit_pages' ) ) {
+            $new_id = wp_insert_post( array(
+                'post_title'   => ( $source->post_title ?: 'Reflection Page' ) . ' (Copy)',
+                'post_excerpt' => $source->post_excerpt,
+                'post_content' => $source->post_content,
+                'post_parent'  => $source->post_parent,
+                'post_type'    => 'page',
+                'post_status'  => 'draft',
+            ), true );
+
+            if ( ! is_wp_error( $new_id ) && $new_id ) {
+                // Definition meta only — modern builder keys + legacy ACF-era keys.
+                // Never copy submission linkage (_reflection_source_page lives on student posts).
+                $copy_keys = array(
+                    '_reflsub_sections', 'is_reflection_page', 'submission_privacy',
+                    'allow_resubmission', '_reflsub_auto_tags', '_reflsub_content_type_slug',
+                    '_reflsub_allow_student_blocks',
+                    // Legacy keys (pages configured pre-plugin via ACF):
+                    'reflection_prompt_1', 'reflection_prompt_2', 'reflection_prompt_3',
+                    'allow_image_upload', 'allow_video_url', 'allow_embed', 'content_type_label',
+                );
+                foreach ( $copy_keys as $meta_key ) {
+                    $val = get_post_meta( $src_id, $meta_key, true );
+                    if ( $val === '' ) {
+                        continue;
+                    }
+                    // wp_slash(): update_post_meta() unslashes internally; re-slashing stores the
+                    // value byte-identical — critical for the _reflsub_sections JSON blob (see
+                    // MEMORY.md "JSON in post meta"). Harmless no-op for plain scalar values.
+                    update_post_meta( $new_id, $meta_key, wp_slash( $val ) );
+                }
+                echo '<div class="notice notice-success is-dismissible"><p>Activity page duplicated as a draft: <a href="' . esc_url( admin_url( 'admin.php?page=reflsub-build&edit=' . $new_id ) ) . '">' . esc_html( get_the_title( $new_id ) ) . '</a></p></div>';
+            } else {
+                echo '<div class="notice notice-error is-dismissible"><p>Could not duplicate the activity page.</p></div>';
+            }
+        }
+    }
+
     $pages = get_posts( array(
         'post_type'      => 'page',
         'post_status'    => array( 'publish', 'draft', 'private', 'pending' ),
@@ -127,15 +175,15 @@ function reflsub_render_pages_list() {
         <?php if ( empty( $pages ) ) : ?>
         <p style="color:#646970; font-style:italic;">No activity pages yet. <a href="<?php echo esc_url( $build_url ); ?>">Build one now.</a></p>
         <?php else : ?>
-        <table class="wp-list-table widefat fixed striped" style="max-width:1100px;">
+        <table class="wp-list-table widefat fixed striped" style="max-width:1240px;">
             <thead>
                 <tr>
-                    <th style="width:28%">Title</th>
-                    <th style="width:22%">Assignment (Parent)</th>
-                    <th style="width:10%">Sections</th>
-                    <th style="width:12%">Submissions</th>
-                    <th style="width:10%">Status</th>
-                    <th style="width:18%">Actions</th>
+                    <th style="width:24%">Title</th>
+                    <th style="width:18%">Assignment (Parent)</th>
+                    <th style="width:8%">Sections</th>
+                    <th style="width:10%">Submissions</th>
+                    <th style="width:8%">Status</th>
+                    <th style="width:32%">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -164,6 +212,10 @@ function reflsub_render_pages_list() {
                     admin_url( 'admin.php?page=activity-builder&reflsub_delete=' . $page->ID ),
                     'reflsub_delete_page_' . $page->ID
                 );
+                $dup_url    = wp_nonce_url(
+                    admin_url( 'admin.php?page=activity-builder&reflsub_duplicate=' . $page->ID ),
+                    'reflsub_duplicate_page_' . $page->ID
+                );
                 $view_url   = get_permalink( $page->ID );
 
                 $status_colors = array(
@@ -189,6 +241,8 @@ function reflsub_render_pages_list() {
                 <td style="white-space:nowrap;">
                     <a href="<?php echo esc_url( $edit_url ); ?>" class="button button-small">Edit</a>
                     <a href="<?php echo esc_url( $view_url ); ?>" class="button button-small" target="_blank">View</a>
+                    <a href="<?php echo esc_url( $dup_url ); ?>" class="button button-small"
+                       onclick="return confirm('Duplicate this activity page as a new draft?');">Duplicate</a>
                     <a href="<?php echo esc_url( $delete_url ); ?>" class="button button-small"
                        style="color:#d63638;"
                        onclick="return confirm('Move this activity page to trash?');">Trash</a>
@@ -950,7 +1004,7 @@ function reflsub_render_page_builder() {
                 var reqChecked = data.required ? ' checked' : '';
                 var maxMin = parseInt(data.max_minutes, 10);
                 if (isNaN(maxMin) || maxMin <= 0) maxMin = 5;
-                return '<p class="reflsub-flag-note">Adds an in-browser audio recorder. Students record a response with their device microphone, play it back, and re-record before submitting. Requires HTTPS (works on localhost for testing).</p>' +
+                return '<p class="reflsub-flag-note">Adds an in-browser audio recorder. Students record a response with their device microphone, or upload a pre-recorded audio file.</p>' +
                     '<div class="reflsub-section-meta">' +
                     '<label><input type="number" class="reflsub-audio-max" min="1" max="30" value="' + esc(maxMin) + '" style="width:70px;"> Max length (minutes)</label>' +
                     '<label><input type="checkbox" class="reflsub-audio-required"' + reqChecked + '> Required</label>' +
