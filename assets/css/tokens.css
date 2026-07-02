@@ -1,0 +1,59 @@
+/**
+ * Activity Builder — design tokens.
+ *
+ * The single source of truth for the plugin's palette and shape language.
+ * Loaded as a dependency of every other plugin stylesheet (admin.css,
+ * form.css, audio-recorder.css) — never enqueued on its own.
+ *
+ * Rules of the road:
+ *  - New CSS must use these custom properties, not raw hex values.
+ *  - Style with the SEMANTIC tokens (--rs-accent, --rs-danger, …) wherever
+ *    possible; reach for the raw brand tokens (--rs-blue, --rs-fire, …) only
+ *    when a rule is genuinely about that colour rather than its role.
+ *  - Changing the brand palette should only ever mean editing this file.
+ */
+
+:root {
+    /* ── Brand palette ─────────────────────────────────────────── */
+    --rs-blue:          #1b28b4;   /* International Klein Blue — headings */
+    --rs-blue-dark:     #141e88;
+    --rs-sky:           #62b1d8;   /* Fresh Sky */
+    --rs-aqua:          #ace7d4;   /* Pearl Aqua */
+    --rs-cream:         #f3feca;   /* Cream */
+    --rs-fire:          #ff4128;   /* Scarlet Fire — primary buttons */
+
+    /* ── Semantic aliases (use these in rules) ─────────────────── */
+    --rs-accent:        var(--rs-blue);
+    --rs-accent-dark:   var(--rs-blue-dark);
+    --rs-accent-bg:     var(--rs-cream);
+    --rs-accent-border: var(--rs-aqua);
+    --rs-accent-text:   var(--rs-cream);   /* text on Klein Blue */
+    --rs-danger:        var(--rs-fire);
+    --rs-danger-bg:     rgba(255,65,40,.08);
+    --rs-danger-border: rgba(255,65,40,.28);
+
+    /* ── Status colours (WP-native; post states, notices) ──────── */
+    --rs-ok:            #00a32a;   /* published / success */
+    --rs-warn:          #dba617;   /* pending / caution */
+    --rs-info:          #2271b1;   /* private / informational */
+    --rs-muted:         #646970;   /* draft / secondary text */
+
+    /* ── Front-end form chrome (matches WP defaults on purpose) ── */
+    --rs-focus:         #2271b1;   /* focus rings on student-facing inputs */
+    --rs-line:          #c3c4c7;   /* default input/divider borders */
+
+    /* ── Neutrals ──────────────────────────────────────────────── */
+    --rs-g50:  #f8fafc;
+    --rs-g100: #f1f5f9;
+    --rs-g200: #e2e8f0;
+    --rs-g500: #64748b;
+    --rs-g700: #334155;
+    --rs-g900: #0f172a;
+
+    /* ── Shape, elevation, motion ──────────────────────────────── */
+    --rs-r:    12px;
+    --rs-r-sm: 7px;
+    --rs-pill: 999px;
+    --rs-shadow-sm: 0 1px 3px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+    --rs-t: .15s ease;
+}

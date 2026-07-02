@@ -20,25 +20,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 
-// ── Prompt label styles on single posts ───────────────────────────────────────
-add_action( 'wp_head', function () {
-    if ( ! is_singular( 'post' ) ) return;
-    ?>
-    <style>
-    .reflsub-prompt-label {
-        font-style: italic;
-        font-weight: 600;
-        font-size: 0.9em;
-        color: #64748b;
-        border-left: 3px solid #ace7d4;
-        padding-left: 10px;
-        margin-bottom: 2px;
-    }
-    </style>
-    <?php
-} );
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Allow browser-recorded audio MIME types for the Audio Recording section.
 // MediaRecorder emits audio/webm (Chrome/Firefox) or audio/mp4 (Safari/iOS);
@@ -54,61 +35,8 @@ function reflsub_allow_audio_mimes( $mimes ) {
     return $mimes;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Enqueue the front-end form JavaScript.
-// Loaded as a real script (NOT inlined in shortcode output) so it never passes
-// through the_content / wptexturize — which would corrupt && into &#038;&#038;.
-// Called from inside the render functions, so it only loads on pages that
-// actually output the form. Both render paths share this one element-guarded file.
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Version string for a bundled asset: its file mtime, so browsers always pick up
-// edits (and deploys), falling back to the plugin version if the file is missing.
-function reflsub_asset_ver( $relpath ) {
-    $full = REFLSUB_DIR . ltrim( $relpath, '/' );
-    return file_exists( $full ) ? (string) filemtime( $full ) : REFLSUB_VERSION;
-}
-
-function reflsub_enqueue_form_assets() {
-    // Shared audio recorder widget (also used by the New Post builder).
-    reflsub_enqueue_audio_recorder();
-
-    if ( wp_script_is( 'reflsub-reflection-form', 'enqueued' ) ) {
-        return;
-    }
-    wp_enqueue_script(
-        'reflsub-reflection-form',
-        REFLSUB_URL . 'assets/js/reflection-form.js',
-        array( 'reflsub-audio-recorder' ), // recorder widget loads first
-        reflsub_asset_ver( 'assets/js/reflection-form.js' ),
-        true // in footer — runs after the form HTML is in the DOM
-    );
-    wp_localize_script( 'reflsub-reflection-form', 'reflsubForm', array(
-        'postMaxBytes' => (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ),
-    ) );
-}
-
-// Enqueue the shared audio recorder widget (JS + CSS). Safe to call repeatedly;
-// reused by both the activity form and the New Post builder (admin).
-function reflsub_enqueue_audio_recorder() {
-    if ( ! wp_script_is( 'reflsub-audio-recorder', 'enqueued' ) ) {
-        wp_enqueue_script(
-            'reflsub-audio-recorder',
-            REFLSUB_URL . 'assets/js/audio-recorder.js',
-            array(),
-            reflsub_asset_ver( 'assets/js/audio-recorder.js' ),
-            true
-        );
-    }
-    if ( ! wp_style_is( 'reflsub-audio-recorder', 'enqueued' ) ) {
-        wp_enqueue_style(
-            'reflsub-audio-recorder',
-            REFLSUB_URL . 'assets/css/audio-recorder.css',
-            array(),
-            reflsub_asset_ver( 'assets/css/audio-recorder.css' )
-        );
-    }
-}
+// Asset helpers (reflsub_asset_ver, reflsub_enqueue_form_assets,
+// reflsub_enqueue_audio_recorder) live in inc/assets.php.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: sanitize an embed code — allows <iframe> only, strips everything else
@@ -369,6 +297,12 @@ function reflsub_handle_reflection_submission() {
 
     if ( ! is_user_logged_in() ) {
         wp_die( 'You must be logged in to submit a reflection.' );
+    }
+
+    // Multisite: being logged in to the network is not the same as belonging to
+    // this site — reject users who aren't members of the current blog.
+    if ( is_multisite() && ! is_user_member_of_blog() ) {
+        wp_die( 'You must be a member of this site to submit a reflection.' );
     }
 
     $page_id = intval( $_POST['reflection_page_id'] ?? 0 );
@@ -1305,59 +1239,6 @@ function reflsub_reflection_form_shortcode( $atts ) {
         </form>
     </div>
 
-    <style>
-        .reflection-form-wrap {
-            max-width: 720px;
-            margin: 2rem 0;
-        }
-        .reflection-form .reflection-field {
-            margin-bottom: 2rem;
-        }
-        .reflection-form label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 0.6rem;
-            font-size: 1.05rem;
-            line-height: 1.5;
-        }
-        .reflection-form textarea,
-        .reflection-form input[type="url"] {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #c3c4c7;
-            border-radius: 4px;
-            font-size: 1rem;
-            font-family: inherit;
-            box-sizing: border-box;
-        }
-        .reflection-form textarea { resize: vertical; }
-        .reflection-form textarea:focus,
-        .reflection-form input[type="url"]:focus {
-            outline: none;
-            border-color: #2271b1;
-            box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.15);
-        }
-        .reflection-form input[type="file"] {
-            display: block;
-            margin-bottom: 0.4rem;
-        }
-        .reflection-hint {
-            margin: 0.3rem 0 0;
-            font-size: 0.85rem;
-            color: #646970;
-        }
-        .reflection-submit { margin-top: 1.5rem; }
-        .reflection-notice {
-            padding: 1rem 1.5rem;
-            border-radius: 4px;
-            margin-bottom: 1.5rem;
-        }
-        .reflection-notice p { margin: 0.25rem 0; }
-        .reflection-success   { background: #d5f4e6; border-left: 4px solid #00a32a; }
-        .reflection-error     { background: #fce8e8; border-left: 4px solid #d63638; }
-        .reflection-info      { background: #f0f6fc; border-left: 4px solid #2271b1; }
-        .reflection-duplicate { background: #fff8e5; border-left: 4px solid #dba617; }
-    </style>
 
     <?php reflsub_enqueue_form_assets(); ?>
     <?php
@@ -1912,245 +1793,6 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         </form>
     </div>
 
-    <style>
-        .reflection-form-wrap { max-width: 720px; margin: 2rem 0; }
-        .reflection-intro { margin-bottom: 1.75rem; padding: 1rem 1.25rem; font-size: 1.325rem; line-height: 1.65; color: #1d2327; background: #f6f7f7; border-radius: 8px; }
-        .reflection-intro p { margin: 0 0 0.75rem; }
-        .reflection-intro p:last-child { margin-bottom: 0; }
-        .reflection-form .reflection-field { margin-bottom: 2rem; }
-        .reflection-form label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 0.6rem;
-            font-size: 1.05rem;
-            line-height: 1.5;
-        }
-        .reflection-form textarea,
-        .reflection-form input[type="text"],
-        .reflection-form input[type="url"] {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #c3c4c7;
-            border-radius: 4px;
-            font-size: 1rem;
-            font-family: inherit;
-            box-sizing: border-box;
-        }
-        .reflection-form textarea { resize: vertical; }
-        .reflection-form textarea:focus,
-        .reflection-form input[type="text"]:focus,
-        .reflection-form input[type="url"]:focus {
-            outline: none;
-            border-color: #2271b1;
-            box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.15);
-        }
-        .reflection-form input.reflsub-entry-title {
-            padding: 0.95rem 1rem;
-            font-size: 1.2rem;
-            font-weight: 500;
-        }
-        .reflection-form input[type="file"] { display: block; margin-bottom: 0.4rem; }
-        .reflection-hint { margin: 0.3rem 0 0; font-size: 0.85rem; color: #646970; }
-
-        /* ── Re-reflect card ────────────────────────────────────────── */
-        .reflsub-rr-card {
-            background: #f8f5ff;
-            border-left: 4px solid #7c5cbf;
-            border-radius: 6px;
-            padding: 1.1rem 1.25rem;
-        }
-        .reflsub-rr-card-heading {
-            margin: 0 0 0.6rem;
-            font-size: 0.85rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: #7c5cbf;
-        }
-        .reflsub-rr-card blockquote.reflsub-rr-card-excerpt {
-            margin: 0 0 0.75rem;
-            padding: 0;
-            border: none;
-            font-style: italic;
-            font-size: 1rem;
-            line-height: 1.65;
-            color: #3c434a;
-        }
-        .reflsub-rr-card-meta {
-            margin: 0;
-            font-size: 0.85rem;
-            color: #646970;
-        }
-        .reflsub-rr-card-meta a { color: #7c5cbf; }
-
-        /* ── Drop zone ─────────────────────────────────────────────── */
-        .reflsub-existing-images {
-            margin-bottom: 0.75rem;
-            padding: 0.6rem 0.75rem;
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 6px;
-        }
-        .reflsub-existing-label {
-            margin: 0 0 0.5rem;
-            font-size: 0.85rem;
-            color: #166534;
-        }
-        .reflsub-existing-thumbs {
-            display: flex; flex-wrap: wrap; gap: 8px;
-        }
-        .reflsub-existing-wrap {
-            position: relative; display: inline-block; line-height: 0;
-        }
-        .reflsub-existing-wrap img {
-            width: 80px; height: 80px; object-fit: cover;
-            border-radius: 6px; border: 2px solid #86efac;
-            box-shadow: 0 1px 3px rgba(0,0,0,.1);
-            display: block;
-        }
-        .reflsub-existing-remove {
-            position: absolute; top: -7px; right: -7px;
-            width: 20px; height: 20px; border-radius: 50%;
-            background: #d63638; color: #fff;
-            border: 2px solid #fff; font-size: 13px; line-height: 1;
-            cursor: pointer; padding: 0;
-            display: flex; align-items: center; justify-content: center;
-            opacity: 0; transition: opacity .15s;
-            box-shadow: 0 1px 3px rgba(0,0,0,.35);
-        }
-        .reflsub-existing-wrap:hover .reflsub-existing-remove { opacity: 1; }
-        /* Audio recorder styles live in assets/css/audio-recorder.css (shared). */
-        .reflsub-drop-zone {
-            position: relative;
-            border: 2px dashed #c3c4c7;
-            border-radius: 8px;
-            background: #f9f9f9;
-            padding: 2rem 1.5rem;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color .15s, background .15s;
-        }
-        .reflsub-drop-zone.is-over {
-            border-color: #f59e0b;
-            background: #fffbeb;
-        }
-        .reflsub-drop-zone.has-files {
-            border-color: #00a32a;
-            background: #f0fdf4;
-        }
-        .reflsub-drop-inner { pointer-events: none; }
-        .reflsub-drop-icon { font-size: 2rem; display: block; margin-bottom: 0.4rem; }
-        .reflsub-drop-label { margin: 0 0 0.25rem; font-weight: 600; color: #3c434a; }
-        .reflsub-drop-sub { margin: 0; font-size: 0.9rem; color: #646970; }
-        .reflsub-drop-browse {
-            color: #f59e0b; text-decoration: underline;
-            cursor: pointer; pointer-events: all;
-            font-weight: 600;
-        }
-        /* Hide the raw file input; the label triggers it */
-        .reflsub-drop-input {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            opacity: 0; cursor: pointer;
-        }
-        .reflsub-drop-previews {
-            display: flex; flex-wrap: wrap; gap: 8px;
-            margin-top: 1rem; justify-content: center;
-        }
-        .reflsub-preview-wrap {
-            position: relative; display: inline-block;
-            line-height: 0;
-        }
-        .reflsub-preview-wrap img {
-            width: 80px; height: 80px; object-fit: cover;
-            border-radius: 6px; border: 2px solid #fde68a;
-            box-shadow: 0 1px 3px rgba(0,0,0,.1);
-            display: block;
-        }
-        .reflsub-preview-remove {
-            position: absolute; top: -7px; right: -7px;
-            width: 20px; height: 20px; border-radius: 50%;
-            background: #d63638; color: #fff;
-            border: 2px solid #fff; font-size: 13px; line-height: 1;
-            cursor: pointer; padding: 0;
-            display: flex; align-items: center; justify-content: center;
-            opacity: 0; transition: opacity .15s;
-            box-shadow: 0 1px 3px rgba(0,0,0,.35);
-        }
-        .reflsub-preview-wrap:hover .reflsub-preview-remove { opacity: 1; }
-        .reflsub-drop-count {
-            font-size: 0.8rem; color: #00a32a; font-weight: 600; margin-top: 0.5rem;
-        }
-        .reflection-submit { margin-top: 1.5rem; }
-        .reflection-notice {
-            padding: 1rem 1.5rem;
-            border-radius: 4px;
-            margin-bottom: 1.5rem;
-        }
-        .reflection-notice p { margin: 0.25rem 0; }
-        .reflection-success   { background: #d5f4e6; border-left: 4px solid #00a32a; }
-        .reflection-error     { background: #fce8e8; border-left: 4px solid #d63638; }
-        .reflection-info      { background: #f0f6fc; border-left: 4px solid #2271b1; }
-        .reflection-duplicate { background: #fff8e5; border-left: 4px solid #dba617; }
-
-        /* ── Student-added blocks palette ────────────────────────────── */
-        #reflsub-student-blocks { margin-top: 1rem; }
-        #reflsub-student-blocks:empty { margin-top: 0; }
-        .reflsub-student-block {
-            position: relative;
-            margin-bottom: 1.25rem;
-            padding: 1rem 1.25rem 1.1rem;
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,.04);
-        }
-        .reflsub-student-block-header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 0.6rem;
-        }
-        .reflsub-student-block-label {
-            font-size: 0.8rem; font-weight: 700;
-            text-transform: uppercase; letter-spacing: .06em;
-            color: #64748b;
-        }
-        .reflsub-student-block-remove {
-            background: none; border: none; padding: 2px 8px;
-            color: #d63638; font-size: 0.85rem; font-weight: 600;
-            cursor: pointer; border-radius: 4px;
-            transition: background .15s;
-        }
-        .reflsub-student-block-remove:hover { background: #fce8e8; }
-        .reflsub-student-block label {
-            margin-bottom: 0.35rem; font-size: 0.95rem;
-        }
-
-        .reflsub-student-palette {
-            display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-            padding: 14px 16px;
-            margin: 1.5rem 0 1rem;
-            background: #f8fafc;
-            border: 1.5px dashed #cbd5e1;
-            border-radius: 8px;
-        }
-        .reflsub-student-palette-label {
-            font-size: 0.85rem; font-weight: 600;
-            color: #64748b; margin-right: 4px;
-        }
-        .reflsub-student-add-btn {
-            border: 1.5px solid #cbd5e1;
-            background: #fff;
-            color: #334155;
-            border-radius: 999px;
-            padding: 6px 14px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background .15s, color .15s, border-color .15s;
-        }
-        .reflsub-student-add-btn:hover {
-            background: #1b28b4; color: #fff; border-color: #1b28b4;
-        }
-    </style>
 
     <?php reflsub_enqueue_form_assets(); ?>
     <?php

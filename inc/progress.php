@@ -82,9 +82,9 @@ function reflsub_render_progress_page() {
     <div class="wrap">
         <h1>Progress</h1>
 
-        <form method="get" style="margin-bottom:1.5rem; display:flex; align-items:center; gap:12px;">
+        <form method="get" class="reflsub-progress-filter">
             <input type="hidden" name="page" value="reflsub-progress">
-            <label for="reflsub-assignment-select" style="font-weight:600;">Assignment:</label>
+            <label for="reflsub-assignment-select">Assignment:</label>
             <select id="reflsub-assignment-select" name="assignment" onchange="this.form.submit()">
                 <option value="0">— Select an assignment —</option>
                 <?php foreach ( $assignments as $aid => $atitle ) : ?>
@@ -97,12 +97,12 @@ function reflsub_render_progress_page() {
         </form>
 
         <?php if ( empty( $assignments ) ) : ?>
-        <p style="color:#646970; font-style:italic;">
+        <p class="reflsub-empty-note">
             No assignments found. An assignment is a page that is the parent of one or more reflection pages.
             <a href="<?php echo esc_url( admin_url( 'admin.php?page=reflsub-build' ) ); ?>">Build a reflection page</a> and set its parent to create an assignment.
         </p>
         <?php elseif ( ! $selected_id ) : ?>
-        <p style="color:#646970; font-style:italic;">Select an assignment above to see student progress.</p>
+        <p class="reflsub-empty-note">Select an assignment above to see student progress.</p>
         <?php else : ?>
 
         <?php
@@ -122,7 +122,7 @@ function reflsub_render_progress_page() {
         ) );
 
         if ( empty( $tasks ) ) : ?>
-        <p style="color:#646970; font-style:italic;">
+        <p class="reflsub-empty-note">
             No reflection pages found under "<strong><?php echo esc_html( get_the_title( $selected_id ) ); ?></strong>".
             Make sure reflection pages have this assignment set as their parent.
         </p>
@@ -159,27 +159,21 @@ function reflsub_render_progress_page() {
             $submission_index[ $sub->post_author ][ $src ] = $sub;
         }
 
-        $status_colors = array(
-            'publish' => '#00a32a',
-            'pending' => '#dba617',
-            'private' => '#2271b1',
-            'draft'   => '#646970',
-        );
         ?>
 
-        <h2 style="font-size:1rem; margin-bottom:0.5rem;">
+        <h2 class="reflsub-progress-summary">
             Assignment: <em><?php echo esc_html( get_the_title( $selected_id ) ); ?></em>
             &nbsp;·&nbsp; <?php echo count( $tasks ); ?> task<?php echo count( $tasks ) !== 1 ? 's' : ''; ?>
             &nbsp;·&nbsp; <?php echo count( $students ); ?> student<?php echo count( $students ) !== 1 ? 's' : ''; ?>
         </h2>
 
-        <div style="overflow-x:auto; max-width:100%;">
-        <table class="wp-list-table widefat fixed" style="table-layout:auto; width:auto; min-width:600px;">
+        <div class="reflsub-progress-scroll">
+        <table class="wp-list-table widefat fixed reflsub-progress-table">
             <thead>
                 <tr>
-                    <th style="min-width:160px; white-space:nowrap;">Student</th>
+                    <th>Student</th>
                     <?php foreach ( $tasks as $task ) : ?>
-                    <th style="min-width:120px; text-align:center; font-size:12px; white-space:nowrap;">
+                    <th>
                         <a href="<?php echo esc_url( get_permalink( $task->ID ) ); ?>" target="_blank"
                            title="View page">
                             <?php echo esc_html( $task->post_title ?: '(no title)' ); ?>
@@ -195,27 +189,26 @@ function reflsub_render_progress_page() {
             <tr>
                 <td>
                     <strong><?php echo esc_html( $student->display_name ); ?></strong><br>
-                    <small style="color:#646970;"><?php echo esc_html( $student->user_login ); ?></small>
+                    <small><?php echo esc_html( $student->user_login ); ?></small>
                 </td>
                 <?php foreach ( $tasks as $task ) :
                     $sub = $student_subs[ $task->ID ] ?? null;
                 ?>
-                <td style="text-align:center; vertical-align:middle;">
+                <td>
                     <?php if ( $sub ) :
-                        $status_color = $status_colors[ $sub->post_status ] ?? '#646970';
-                        $sub_url      = get_permalink( $sub->ID );
-                        $sub_date     = get_the_date( 'M j', $sub->ID );
-                        $sub_status   = ucfirst( $sub->post_status );
+                        $sub_url    = get_permalink( $sub->ID );
+                        $sub_date   = get_the_date( 'M j', $sub->ID );
+                        $sub_status = ucfirst( $sub->post_status );
                     ?>
                     <a href="<?php echo esc_url( $sub_url ); ?>"
                        target="_blank"
                        title="<?php echo esc_attr( $sub_status ); ?> — <?php echo esc_attr( $sub_date ); ?>"
-                       style="color:<?php echo esc_attr( $status_color ); ?>; text-decoration:none; font-size:18px; line-height:1;">
+                       class="reflsub-status-check <?php echo esc_attr( 'is-' . $sub->post_status ); ?>">
                         &#10003;
                     </a><br>
-                    <small style="color:#646970; font-size:10px;"><?php echo esc_html( $sub_date ); ?></small>
+                    <small class="reflsub-status-date"><?php echo esc_html( $sub_date ); ?></small>
                     <?php else : ?>
-                    <span style="color:#c3c4c7; font-size:14px;">—</span>
+                    <span class="reflsub-status-none">—</span>
                     <?php endif; ?>
                 </td>
                 <?php endforeach; ?>
@@ -225,12 +218,12 @@ function reflsub_render_progress_page() {
         </table>
         </div>
 
-        <p style="margin-top:8px; color:#646970; font-size:12px;">
+        <p class="reflsub-progress-legend">
             &#10003; = submitted (click to edit). Color indicates status:
-            <span style="color:#00a32a;">&#9632;</span> Published
-            <span style="color:#dba617; margin-left:6px;">&#9632;</span> Pending
-            <span style="color:#2271b1; margin-left:6px;">&#9632;</span> Private
-            <span style="color:#646970; margin-left:6px;">&#9632;</span> Draft
+            <span class="reflsub-swatch is-publish">&#9632;</span> Published
+            <span class="reflsub-swatch is-pending">&#9632;</span> Pending
+            <span class="reflsub-swatch is-private">&#9632;</span> Private
+            <span class="reflsub-swatch is-draft">&#9632;</span> Draft
         </p>
 
         <?php endif; // tasks exist ?>
