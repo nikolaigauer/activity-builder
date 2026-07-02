@@ -369,14 +369,6 @@
             });
         });
 
-        // JSON.stringify that preserves non-ASCII as real UTF-8 instead of
-        // \uXXXX escapes — keeps PHP's wp_unslash from eating the backslash.
-        function jsonStringifyUtf8(data) {
-            return JSON.stringify(data).replace(/\\u([0-9a-fA-F]{4})/g, function(_, hex) {
-                return String.fromCharCode(parseInt(hex, 16));
-            });
-        }
-
         form.addEventListener('submit', function() {
             var blocks = [];
             container.querySelectorAll('.reflsub-student-block').forEach(function(el) {
@@ -393,7 +385,7 @@
                 // image / pdf / audio blocks carry no JSON content — files arrive via $_FILES
                 blocks.push(b);
             });
-            hidden.value = jsonStringifyUtf8(blocks);
+            hidden.value = JSON.stringify(blocks);
         });
     })();
 

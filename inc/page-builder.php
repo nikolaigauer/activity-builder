@@ -788,7 +788,7 @@ function reflsub_render_page_builder() {
 
                 sections.push(sec);
             });
-            document.getElementById('reflsub-sections-json').value = jsonStringify(sections);
+            document.getElementById('reflsub-sections-json').value = JSON.stringify(sections);
         }
 
         // Public API (called by inline onclick attributes)
@@ -815,15 +815,6 @@ function reflsub_render_page_builder() {
                 row.remove();
             }
         };
-
-        // JSON stringify that preserves non-ASCII characters as real UTF-8
-        // instead of \uXXXX escape sequences.  This prevents PHP's wp_unslash
-        // (stripslashes) from eating the leading backslash out of e.g. \u2014.
-        function jsonStringify(data) {
-            return JSON.stringify(data).replace(/\\u([0-9a-fA-F]{4})/g, function(_, hex) {
-                return String.fromCharCode(parseInt(hex, 16));
-            });
-        }
 
         // Serialise before form submit
         var form = document.getElementById('reflsub-builder-form');

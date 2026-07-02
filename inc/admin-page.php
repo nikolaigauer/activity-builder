@@ -1,12 +1,14 @@
 <?php
 /**
- * Admin Page — Reflection Builder
+ * Admin Page — top-level Activity Builder menu + Submissions list
  *
- * Adds a "Reflections" top-level menu (admin only) with:
- *   - Submissions list: all posts with _reflection_source_page meta,
- *     filterable by status; Approve / Trash actions inline.
- *   - "New Reflection Page" admin toolbar item and handler: creates a draft
- *     page with [reflection_form] shortcode baked in and sensible ACF defaults.
+ *   - Registers the "Activity Builder" top-level menu (admin only); Activity
+ *     Pages is the default landing view (rendered by page-builder.php).
+ *   - Submissions list (reflsub-submissions): all posts with
+ *     _reflection_source_page meta, filterable by status / student / page;
+ *     Approve / Trash actions inline.
+ *   - "+ New > Activity Page" admin toolbar item.
+ *   - reflsub_tip() shared tooltip helper.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

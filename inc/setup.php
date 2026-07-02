@@ -557,7 +557,7 @@ function reflsub_render_setup_page() {
                         ) );
                         $child_count = count( $child_ids );
                         $pages_link  = $child_count > 0
-                            ? admin_url( 'admin.php?page=reflsub-pages' )
+                            ? admin_url( 'admin.php?page=activity-builder' )
                             : null;
                         $items[] = array(
                             'ok'    => $child_count > 0,
