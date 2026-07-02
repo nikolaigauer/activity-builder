@@ -43,9 +43,11 @@ function reflsub_register_content_type_taxonomy() {
         'show_in_rest'      => true,
         'rewrite'           => array( 'slug' => 'content-type' ),
         'capabilities'      => array(
-            'manage_terms' => 'edit_posts',
-            'edit_terms'   => 'edit_posts',
-            'delete_terms' => 'edit_posts',
+            // Students (Authors) only ever assign terms; creating/renaming/deleting
+            // the shared vocabulary is an instructor/admin action.
+            'manage_terms' => 'manage_options',
+            'edit_terms'   => 'manage_options',
+            'delete_terms' => 'manage_options',
             'assign_terms' => 'edit_posts',
         ),
     ) );

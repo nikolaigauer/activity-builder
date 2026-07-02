@@ -157,7 +157,8 @@ function reflsub_setup_create_reflection_child( $parent_id, $title ) {
                 'required'   => true,
             ),
         ) );
-        update_post_meta( $post_id, '_reflsub_sections', $sections );
+        // wp_slash(): update_post_meta() unslashes internally; protect JSON escapes from corruption.
+        update_post_meta( $post_id, '_reflsub_sections', wp_slash( $sections ) );
     }
 
     return $post_id;
