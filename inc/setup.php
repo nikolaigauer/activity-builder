@@ -243,9 +243,8 @@ function reflsub_render_setup_page() {
     <div class="wrap">
         <h1>Site Setup</h1>
         <p style="color:#646970; max-width:680px;">
-            Create the page structure and navigation menus for your site.
-            Each menu uses a <strong>Page List</strong> block scoped to a parent page —
-            new child pages appear in the menu automatically, wherever you choose to place it.
+            Create parent pages with self-updating navigation menus — new child pages
+            appear in their menu automatically.
         </p>
 
         <?php if ( $notice === 'created' ) : ?>
@@ -270,7 +269,7 @@ function reflsub_render_setup_page() {
                 background: #fff;
                 border: 1px solid #c3c4c7;
                 border-radius: 6px;
-                overflow: hidden;
+                /* no overflow:hidden — .reflsub-tip bubbles must escape the card */
             }
             .reflsub-setup-card-header {
                 display: flex;
@@ -279,6 +278,7 @@ function reflsub_render_setup_page() {
                 padding: 13px 20px;
                 background: #f8fafc;
                 border-bottom: 1px solid #e2e8f0;
+                border-radius: 6px 6px 0 0;
             }
             .reflsub-setup-card-header h2 {
                 margin: 0;
@@ -431,7 +431,7 @@ function reflsub_render_setup_page() {
                     'type'         => 'reflections',
                     'icon'         => 'dashicons-book',
                     'title'        => 'Reflections',
-                    'description'  => 'Weekly reflection prompts. Creates a parent page and a sample activity page.',
+                    'description'  => 'A home for weekly reflection prompts.',
                     'default_parent' => 'Reflections',
                     'default_nav'    => 'Reflections Menu',
                     'default_child'  => 'Reflections — Week 1',
@@ -442,7 +442,7 @@ function reflsub_render_setup_page() {
                     'type'         => 'assignments',
                     'icon'         => 'dashicons-list-view',
                     'title'        => 'Assignments',
-                    'description'  => 'Assignment activities. Creates a parent page and a sample activity page.',
+                    'description'  => 'A home for assignment activities.',
                     'default_parent' => 'Assignments',
                     'default_nav'    => 'Assignments Menu',
                     'default_child'  => 'Assignment 1',
@@ -453,7 +453,7 @@ function reflsub_render_setup_page() {
                     'type'         => 'custom',
                     'icon'         => 'dashicons-plus-alt2',
                     'title'        => 'Additional Menu',
-                    'description'  => 'Create any additional parent page + auto-updating menu.',
+                    'description'  => 'Any other parent page + menu you need.',
                     'default_parent' => '',
                     'default_nav'    => '',
                     'default_child'  => '',
@@ -492,7 +492,10 @@ function reflsub_render_setup_page() {
                         </div>
 
                         <div class="reflsub-setup-field">
-                            <label for="nav_name_<?php echo esc_attr( $card['type'] ); ?>">Navigation menu name</label>
+                            <label for="nav_name_<?php echo esc_attr( $card['type'] ); ?>">
+                                Navigation menu name
+                                <?php echo reflsub_tip( 'Creates a Navigation menu holding a Page List scoped to the parent page. Place it anywhere with a Navigation block in the Site Editor; child pages added later appear automatically.' ); ?>
+                            </label>
                             <input type="text"
                                    id="nav_name_<?php echo esc_attr( $card['type'] ); ?>"
                                    name="nav_name"

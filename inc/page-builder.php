@@ -363,12 +363,12 @@ function reflsub_render_page_builder() {
                                 </label>
                                 <textarea id="reflsub-intro-text" name="reflsub_intro_text" rows="6"
                                           placeholder="Optional description shown above the student form…"><?php echo esc_textarea( $intro_text ); ?></textarea>
-                                <span class="reflsub-field-desc">Displayed above the form on the page.</span>
                             </div>
 
                             <div class="reflsub-field">
                                 <label for="reflsub-parent">
                                     Parent Page <span class="reflsub-optional">optional</span>
+                                    <?php echo reflsub_tip( 'Child pages appear automatically in any menu built from their parent — like the menus Setup creates. Parents also group pages in Progress.' ); ?>
                                 </label>
                                 <select id="reflsub-parent" name="reflsub_parent_id">
                                     <option value="0">— Standalone —</option>
@@ -378,9 +378,6 @@ function reflsub_render_page_builder() {
                                     </option>
                                     <?php endforeach; ?>
                                 </select>
-                                <span class="reflsub-field-desc">
-                                    Nest under a parent page so it auto-appears in any menus using Parent pages.
-                                </span>
                                 <button type="button" id="reflsub-new-parent-toggle" class="reflsub-new-parent-toggle"
                                         data-nonce="<?php echo esc_attr( wp_create_nonce( 'reflsub_create_parent_page' ) ); ?>">
                                     + New parent page
@@ -395,11 +392,12 @@ function reflsub_render_page_builder() {
                             <div class="reflsub-field">
                                 <label for="reflsub-auto-tags">
                                     Auto-tags <span class="reflsub-optional">optional</span>
+                                    <?php echo reflsub_tip( 'Applied to every submission from this page. Students never see or edit these tags — useful for filtering and Re-reflect later.' ); ?>
                                 </label>
                                 <input type="text" id="reflsub-auto-tags" name="reflsub_auto_tags"
                                        placeholder="e.g. week-3, photography, critical-thinking"
                                        value="<?php echo esc_attr( $auto_tags_val ); ?>">
-                                <span class="reflsub-field-desc">Comma-separated. These tags are silently applied to every submission from this page — students don't see them.</span>
+                                <span class="reflsub-field-desc">Comma-separated.</span>
                             </div>
 
                         </div><!-- /.reflsub-col-main -->
@@ -417,13 +415,15 @@ function reflsub_render_page_builder() {
                             </div>
 
                             <div class="reflsub-field">
-                                <label for="reflsub-privacy">Submission Privacy</label>
+                                <label for="reflsub-privacy">
+                                    Submission Privacy
+                                    <?php echo reflsub_tip( 'The post status each submission gets. Pending Review keeps posts hidden until you approve them on the Submissions screen.', 'left' ); ?>
+                                </label>
                                 <select id="reflsub-privacy" name="reflsub_privacy">
                                     <option value="publish" <?php selected( $privacy, 'publish' ); ?>>Publish — visible to all</option>
                                     <option value="private" <?php selected( $privacy, 'private' ); ?>>Private — student only</option>
                                     <option value="pending" <?php selected( $privacy, 'pending' ); ?>>Pending Review</option>
                                 </select>
-                                <span class="reflsub-field-desc">Status applied to each submission.</span>
                             </div>
 
                             <div class="reflsub-field reflsub-field-check">
@@ -431,8 +431,8 @@ function reflsub_render_page_builder() {
                                     <input type="checkbox" name="reflsub_allow_resub" value="1"
                                            <?php checked( $allow_resub, 1 ); ?>>
                                     <span>Re-use Form</span>
+                                    <?php echo reflsub_tip( 'On: students can submit this form repeatedly; each submission becomes its own post. Off: returning students see their existing submission and can edit it instead.', 'left' ); ?>
                                 </label>
-                                <span class="reflsub-field-desc">Each submission creates a new post.</span>
                             </div>
 
                             <div class="reflsub-field reflsub-field-check">
@@ -440,13 +440,14 @@ function reflsub_render_page_builder() {
                                     <input type="checkbox" name="reflsub_allow_student_blocks" value="1"
                                            <?php checked( $allow_student_blocks, 1 ); ?>>
                                     <span>Enable Student Tools</span>
+                                    <?php echo reflsub_tip( 'Adds an "+ Add" palette at the end of the form so students can attach their own paragraphs, images, video, embeds, PDFs or audio. Off: the form is exactly the sections below.', 'left' ); ?>
                                 </label>
-                                <span class="reflsub-field-desc">When disabled, students fill out only the exact sections you've added below.</span>
                             </div>
 
                             <div class="reflsub-field">
                                 <label for="reflsub-content-type">
                                     Content Type <span class="reflsub-optional">optional</span>
+                                    <?php echo reflsub_tip( 'Tags every submission with this content type so portfolios and archives can filter by it. Type a new name to create one on the fly.', 'left' ); ?>
                                 </label>
                                 <?php
                                 $ct_terms = taxonomy_exists( 'content-type' )
@@ -479,7 +480,6 @@ function reflsub_render_page_builder() {
                                     <option value="<?php echo esc_attr( $ct->name ); ?>"></option>
                                     <?php endforeach; ?>
                                 </datalist>
-                                <span class="reflsub-field-desc">Choose one you've used before, or type a new name to create it on the fly.</span>
                             </div>
 
                         </div><!-- /.reflsub-col-sidebar -->
@@ -540,6 +540,26 @@ function reflsub_render_page_builder() {
             audio:      'Audio Recording',
             re_reflect: 'Re-reflect on a Past Post'
         };
+
+        // Hover help per section type, shown as a (?) in the section header.
+        // Mirrors reflsub_tip() in inc/admin-page.php — keep the markup in sync.
+        var HELP = {
+            entry_title: 'The student\'s answer becomes the post title. Left blank, the title falls back to the activity page name plus today\'s date.',
+            image:      'Adds a drag-and-drop image upload field. Students can attach several images.',
+            video:      'Adds a video URL field (YouTube / Vimeo).',
+            embed:      'Adds an embed-code box (Kaltura, iframe…). Everything except the iframe is stripped on save.',
+            tags:       'Students add their own tags to their submission. For tags you control, use Auto-tags in Page Settings.',
+            pdf:        'Adds a PDF upload field (one file, max 15 MB).',
+            audio:      'Adds an in-browser recorder: students record with their microphone or upload an audio file.',
+            re_reflect: 'Shows the student one of their own past posts matching these filters as a read-only card — a nudge to look back before writing. If nothing matches, the card is silently hidden.'
+        };
+
+        function tipHtml(text) {
+            return '<span class="reflsub-tip" tabindex="0">' +
+                '<span class="dashicons dashicons-editor-help" aria-hidden="true"></span>' +
+                '<span class="reflsub-tip-text" role="tooltip">' + text + '</span>' +
+                '</span>';
+        }
 
         // ── Drag-and-drop + up/down reordering ──────────────────────────────────
         var reflsubDragSrc = null;
@@ -612,6 +632,7 @@ function reflsub_render_page_builder() {
                 '<div style="display:flex;align-items:center;gap:8px;">' +
                 '<span class="reflsub-drag-handle" title="Drag to reorder">&#x28BF;</span>' +
                 '<span>' + (LABELS[type] || type) + '</span>' +
+                (HELP[type] ? tipHtml(HELP[type]) : '') +
                 '</div>' +
                 '<div style="display:flex;align-items:center;gap:4px;">' +
                 '<button type="button" class="reflsub-move-btn" onclick="reflsubMoveSection(this,\'up\')" title="Move up">&#8593;</button>' +
@@ -631,8 +652,7 @@ function reflsub_render_page_builder() {
                 var reqChecked = data.required ? ' checked' : '';
                 return '<label>Label / Instruction <span style="font-weight:normal;font-size:.9em;">(shown above the title field)</span></label>' +
                     '<input type="text" class="reflsub-et-label" placeholder="e.g. Give your entry a title" value="' + esc(data.label || '') + '" style="width:100%;">' +
-                    '<div class="reflsub-section-meta" style="margin-top:10px;"><label><input type="checkbox" class="reflsub-et-required"' + reqChecked + '> Required</label></div>' +
-                    '<p class="reflsub-flag-note" style="margin-top:10px;">The student\'s answer becomes the post title. If left blank, the title falls back to the activity page name + today\'s date.</p>';
+                    '<div class="reflsub-section-meta" style="margin-top:10px;"><label><input type="checkbox" class="reflsub-et-required"' + reqChecked + '> Required</label></div>';
             }
 
             if (type === 'prompt') {
@@ -661,32 +681,20 @@ function reflsub_render_page_builder() {
                     '<div class="reflsub-section-meta"><label><input type="checkbox" class="reflsub-mcq-multi"' + multiChecked + '> Allow multiple selections</label></div>';
             }
 
-            if (type === 'image') {
-                return '<p class="reflsub-flag-note">Adds an image upload field to the form. No configuration needed.</p>';
-            }
-            if (type === 'video') {
-                return '<p class="reflsub-flag-note">Adds a Video URL field (YouTube / Vimeo). No configuration needed.</p>';
-            }
-            if (type === 'embed') {
-                return '<p class="reflsub-flag-note">Adds an embed code textarea (Kaltura, iFrame, etc.). No configuration needed.</p>';
-            }
-
-            if (type === 'tags') {
-                return '<p class="reflsub-flag-note">Adds a tag input field to the form so students can add their own tags to their submission. Use the Auto-tags field in Page Settings to apply tags automatically.</p>';
+            if (type === 'image' || type === 'video' || type === 'embed' || type === 'tags') {
+                return '<p class="reflsub-flag-note">No settings.</p>';
             }
 
             if (type === 'pdf') {
                 var reqChecked = data.required ? ' checked' : '';
-                return '<p class="reflsub-flag-note">Adds a PDF upload field to the form. Students may upload one PDF (max 15 MB).</p>' +
-                    '<div class="reflsub-section-meta"><label><input type="checkbox" class="reflsub-pdf-required"' + reqChecked + '> Required</label></div>';
+                return '<div class="reflsub-section-meta"><label><input type="checkbox" class="reflsub-pdf-required"' + reqChecked + '> Required</label></div>';
             }
 
             if (type === 'audio') {
                 var reqChecked = data.required ? ' checked' : '';
                 var maxMin = parseInt(data.max_minutes, 10);
                 if (isNaN(maxMin) || maxMin <= 0) maxMin = 5;
-                return '<p class="reflsub-flag-note">Adds an in-browser audio recorder. Students record a response with their device microphone, or upload a pre-recorded audio file.</p>' +
-                    '<div class="reflsub-section-meta">' +
+                return '<div class="reflsub-section-meta">' +
                     '<label><input type="number" class="reflsub-audio-max" min="1" max="30" value="' + esc(maxMin) + '" style="width:70px;"> Max length (minutes)</label>' +
                     '<label><input type="checkbox" class="reflsub-audio-required"' + reqChecked + '> Required</label>' +
                     '</div>';
@@ -710,8 +718,7 @@ function reflsub_render_page_builder() {
                     '<option value="latest"' + pickLatest + '>Most recent</option>' +
                     '<option value="oldest"' + pickOldest + '>Oldest</option>' +
                     '</select></label>' +
-                    '</div>' +
-                    '<p class="reflsub-flag-note" style="margin-top:10px;">When the student opens this form, one of their past posts matching the filters above will appear as a read-only card. If no match is found the card is silently hidden.</p>';
+                    '</div>';
             }
 
             return '';

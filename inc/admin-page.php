@@ -14,6 +14,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 
+// ── Shared admin UI: hover help tooltip ────────────────────────────────────────
+// Returns a dashicon (?) that reveals $text on hover/focus. CSS-only (admin.css,
+// ".reflsub-tip"); keyboard-reachable via tabindex. Use $align = 'left' when the
+// icon sits near the right edge of a card/column so the bubble grows leftward.
+// Keep tooltip copy to 1–2 sentences: behaviour, consequences, fallbacks —
+// anything an instructor doesn't need to read on every visit.
+
+function reflsub_tip( $text, $align = 'center' ) {
+    $class = 'reflsub-tip' . ( $align === 'left' ? ' reflsub-tip--left' : '' );
+    return '<span class="' . esc_attr( $class ) . '" tabindex="0">'
+         . '<span class="dashicons dashicons-editor-help" aria-hidden="true"></span>'
+         . '<span class="reflsub-tip-text" role="tooltip">' . esc_html( $text ) . '</span>'
+         . '</span>';
+}
+
+
 // ── Admin menu ─────────────────────────────────────────────────────────────────
 
 add_action( 'admin_menu', 'reflsub_add_admin_menu' );

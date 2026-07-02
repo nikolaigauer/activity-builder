@@ -75,7 +75,8 @@
     border-radius: var(--rs-r);
     box-shadow: var(--rs-shadow-sm);
     margin-bottom: 20px;
-    overflow: hidden;
+    /* No overflow:hidden — .reflsub-tip bubbles must escape the card. The
+       header clips its own corners with an explicit radius instead. */
 }
 .reflsub-card-header {
     padding: 13px 24px;
@@ -84,6 +85,7 @@
     color: var(--rs-g500);
     background: var(--rs-g50);
     border-bottom: 1px solid var(--rs-g200);
+    border-radius: var(--rs-r) var(--rs-r) 0 0;
 }
 .reflsub-card-body { padding: 24px; }
 .reflsub-card-desc { margin: 0 0 20px; font-size: 14px; color: var(--rs-g500); }
@@ -328,3 +330,49 @@
 .reflsub-progress-legend { margin-top: 8px; color: var(--rs-muted); font-size: 12px; }
 .reflsub-progress-legend .reflsub-swatch { margin-left: 6px; }
 .reflsub-progress-legend .reflsub-swatch:first-of-type { margin-left: 0; }
+
+/* ── Help tooltips (shared) ────────────────────────────────── */
+/* CSS-only hover/focus tooltip: reflsub_tip() in inc/admin-page.php
+   emits the markup; keyboard users reach it via tabindex="0". */
+.reflsub-tip {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+    margin-left: 4px;
+    color: var(--rs-g500);
+    cursor: help;
+    outline: none;
+}
+.reflsub-tip .dashicons,
+.reflsub-tip .dashicons-editor-help {
+    font-size: 16px; width: 16px; height: 16px; line-height: 1;
+}
+.reflsub-tip:hover, .reflsub-tip:focus { color: var(--rs-accent); }
+.reflsub-tip-text {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    width: max-content;
+    max-width: 240px;
+    padding: 8px 12px;
+    font-size: 12px; font-weight: normal; line-height: 1.5;
+    text-align: left; text-transform: none; letter-spacing: 0;
+    color: #fff; background: var(--rs-g900);
+    border-radius: var(--rs-r-sm);
+    box-shadow: var(--rs-shadow-sm);
+    opacity: 0; visibility: hidden;
+    transition: opacity var(--rs-t);
+    pointer-events: none;
+}
+.reflsub-tip-text::after {
+    content: ""; position: absolute; top: 100%; left: 50%;
+    margin-left: -5px; border: 5px solid transparent;
+    border-top-color: var(--rs-g900);
+}
+.reflsub-tip:hover .reflsub-tip-text,
+.reflsub-tip:focus .reflsub-tip-text { opacity: 1; visibility: visible; }
+/* Variant for icons near the right edge (builder sidebar): grow leftward. */
+.reflsub-tip--left .reflsub-tip-text { left: auto; right: -8px; transform: none; }
+.reflsub-tip--left .reflsub-tip-text::after { left: auto; right: 11px; margin-left: 0; }
