@@ -13,3 +13,9 @@
 # Dev-only folders
 test-reports/
 .claude/
+
+# Internal notes — never publish (roadmaps, security punch-lists, etc.)
+ROADMAP.md
+NOTES.md
+SECURITY-NOTES.md
+*.internal.md
