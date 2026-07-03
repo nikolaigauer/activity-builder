@@ -77,13 +77,20 @@ function reflsub_admin_enqueue_styles( $hook ) {
 
 // ── Front-end form styles ──────────────────────────────────────────────────────
 // Enqueued early (prints in <head>, no unstyled flash) when the queried page
-// will render the form; single posts get it too for .reflsub-prompt-label.
-// The render functions call reflsub_enqueue_form_assets() as a late fallback
-// for pages this detection misses (styles then print in the footer).
+// will render the form OR render post content that contains the static
+// .reflsub-prompt-label markup. Submitted posts carry those prompt labels in
+// their content, so ANY view that outputs post content needs form.css — not just
+// single posts. That includes author/portfolio archives and the blog/home feed
+// (the ePortfolio theme renders full post content on /author/ and /portfolio/).
+// The render functions still call reflsub_enqueue_form_assets() as a late
+// fallback for pages this detection misses (styles then print in the footer).
 
 add_action( 'wp_enqueue_scripts', 'reflsub_maybe_enqueue_form_style' );
 function reflsub_maybe_enqueue_form_style() {
-    if ( is_singular( 'post' ) ) {
+    // is_archive() covers author/category/tag/date/post-type archives; is_home()
+    // covers the blog posts index. Together with single posts, this loads the
+    // prompt-label styling everywhere post content can appear.
+    if ( is_singular( 'post' ) || is_author() || is_home() || is_archive() ) {
         wp_enqueue_style( 'reflsub-form' );
         return;
     }
