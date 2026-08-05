@@ -42,6 +42,73 @@ function reflsub_allow_audio_mimes( $mimes ) {
 // Helper: sanitize an embed code — allows <iframe> only, strips everything else
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Editing a submission: point students at the activity form, not the block editor
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// A student viewing their own post (author archive, single post, admin bar) gets
+// an "Edit" link that lands them in Gutenberg — a different, much larger editor
+// than the one they submitted with, showing their answers as raw blocks with the
+// prompt structure invisible. For a non-expert that is a dead end.
+//
+// The links are retargeted rather than the destination being blocked: the block
+// editor stays fully available (Posts list, direct URL, and untouched for anyone
+// who can manage_options), so nothing is taken away from instructors or from a
+// student who deliberately goes looking for it.
+
+add_filter( 'get_edit_post_link', 'reflsub_retarget_submission_edit_link', 10, 3 );
+function reflsub_retarget_submission_edit_link( $link, $post_id, $context = '' ) {
+    // Instructors/admins keep the raw editor links — they have an explicit
+    // "Edit in WP →" affordance in the Submissions list and often need it.
+    if ( ! $link || current_user_can( 'manage_options' ) ) {
+        return $link;
+    }
+
+    $source_page_id = (int) get_post_meta( $post_id, '_reflection_source_page', true );
+    if ( ! $source_page_id ) {
+        return $link; // not an Activity Builder submission
+    }
+
+    $source = get_post( $source_page_id );
+    if ( ! $source || $source->post_status === 'trash' ) {
+        return $link; // activity page is gone — the block editor is better than nothing
+    }
+
+    $url = add_query_arg( 'edit_submission', $post_id, get_permalink( $source_page_id ) );
+
+    // WP passes 'display' when the URL is about to be echoed into HTML.
+    return ( $context === 'display' ) ? esc_url( $url ) : $url;
+}
+
+
+// Anyone who reaches the block editor for a submission anyway — via the Posts
+// list, a bookmark, or as an admin — gets a way back to the activity form.
+add_action( 'admin_notices', 'reflsub_submission_editor_notice' );
+function reflsub_submission_editor_notice() {
+    $screen = get_current_screen();
+    if ( ! $screen || $screen->base !== 'post' || $screen->post_type !== 'post' ) {
+        return;
+    }
+
+    $post = get_post();
+    if ( ! $post ) {
+        return;
+    }
+
+    $source_page_id = (int) get_post_meta( $post->ID, '_reflection_source_page', true );
+    if ( ! $source_page_id || ! get_post( $source_page_id ) ) {
+        return;
+    }
+
+    printf(
+        '<div class="notice notice-info"><p>%s <a href="%s">%s</a></p></div>',
+        esc_html( 'This post was submitted through Activity Builder. Editing it in the activity form keeps its prompts and structure intact.' ),
+        esc_url( add_query_arg( 'edit_submission', $post->ID, get_permalink( $source_page_id ) ) ),
+        esc_html( 'Open in the activity form →' )
+    );
+}
+
+
 function reflsub_sanitize_embed_code( $raw ) {
     $allowed = array(
         'iframe' => array(
@@ -305,6 +372,14 @@ function reflsub_handle_reflection_submission() {
         wp_die( 'You must be a member of this site to submit a reflection.' );
     }
 
+    // Submitting creates a post authored by this user, so it requires the
+    // capability to author posts. Community visitors are auto-provisioned as
+    // Subscribers, who must never be able to submit; students are onboarded as
+    // Author. Matches the edit_posts gate already used on the admin menus.
+    if ( ! current_user_can( 'edit_posts' ) ) {
+        wp_die( 'Your account does not have permission to submit work on this site.' );
+    }
+
     $page_id = intval( $_POST['reflection_page_id'] ?? 0 );
     if ( ! $page_id || ! get_post( $page_id ) ) {
         wp_die( 'Invalid page reference.' );
@@ -463,6 +538,13 @@ function reflsub_handle_reflection_submission() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $redirect_base ) {
+
+    // Defence in depth: the caller already gates on edit_posts, but this function
+    // is what actually inserts a post, so it re-checks rather than trusting that
+    // every future call site remembers to.
+    if ( ! user_can( $user_id, 'edit_posts' ) ) {
+        wp_die( 'Your account does not have permission to submit work on this site.' );
+    }
 
     // ── Save-as-draft vs submit ────────────────────────────────────────────────
     // Two submit buttons share the name reflsub_submit_action; anything other than
@@ -1153,6 +1235,16 @@ function reflsub_reflection_form_shortcode( $atts ) {
         );
     }
 
+    // ── Insufficient role ──────────────────────────────────────────────────────
+    // Same gate as the sections path: Subscribers cannot author posts.
+    if ( ! current_user_can( 'edit_posts' ) ) {
+        return '<div class="reflection-notice reflection-info">'
+            . '<p><strong>You don\'t have a student account on this site.</strong></p>'
+            . '<p>Your account can read this page but not submit work. If you should be able to '
+            . 'submit, ask your instructor to add you as an Author.</p>'
+            . '</div>';
+    }
+
     $user_id = get_current_user_id();
 
     // ── Duplicate guard — show existing submission instead of form ─────────────
@@ -1332,6 +1424,18 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             '<div class="reflection-notice reflection-info"><p>Please <a href="%s">log in</a> to submit your reflection.</p></div>',
             esc_url( wp_login_url( get_permalink( $page_id ) ) )
         );
+    }
+
+    // ── Insufficient role ──────────────────────────────────────────────────────
+    // Logged in is not enough: community visitors are auto-provisioned as
+    // Subscribers, who cannot author posts. Show a plain explanation rather than
+    // a form that would fail on submit.
+    if ( ! current_user_can( 'edit_posts' ) ) {
+        return '<div class="reflection-notice reflection-info">'
+            . '<p><strong>You don\'t have a student account on this site.</strong></p>'
+            . '<p>Your account can read this page but not submit work. If you should be able to '
+            . 'submit, ask your instructor to add you as an Author.</p>'
+            . '</div>';
     }
 
     $user_id = get_current_user_id();

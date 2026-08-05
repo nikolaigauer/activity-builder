@@ -34,17 +34,10 @@ function reflsub_feedback_register() {
         );
     }
 
-    // Student "My Submissions" — shows under the New Post top-level menu
-    if ( current_user_can( 'edit_posts' ) ) {
-        add_submenu_page(
-            'reflsub-new-post',
-            'My Submissions',
-            'My Submissions',
-            'edit_posts',
-            'reflsub-my-submissions',
-            'reflsub_render_my_submissions_page'
-        );
-    }
+    // The student-facing "My Submissions" menu is NOT registered here — it is the
+    // top level of the student menu tree and is registered together with New Post
+    // in post-form.php (reflsub_post_form_register), so the parent always exists
+    // before its submenus. This file still owns the render callback.
 }
 
 

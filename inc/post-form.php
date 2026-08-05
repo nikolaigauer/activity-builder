@@ -22,14 +22,44 @@ function reflsub_post_form_register() {
         return;
     }
 
+    // The whole student-facing menu tree is registered here, in one function,
+    // rather than beside each render callback — a parent must exist before its
+    // submenus are added, and splitting that across two files couples them by
+    // hook priority. reflsub_render_my_submissions_page() lives in feedback.php,
+    // which plugins_loaded has already required by the time admin_menu fires.
+    //
+    // My Submissions is the top level because it is where students come back to:
+    // "where is my work, did it go through, what did I get back" is asked far more
+    // often than "start a new post", and a returning student should not have to
+    // know that their submissions live inside a menu called New Post.
     add_menu_page(
+        'My Submissions',
+        'My Submissions',
+        'edit_posts',
+        'reflsub-my-submissions',
+        'reflsub_render_my_submissions_page',
+        'dashicons-portfolio',
+        27
+    );
+
+    // add_menu_page() auto-creates a first submenu entry labelled after the parent;
+    // re-registering the same slug renames it rather than adding a duplicate.
+    add_submenu_page(
+        'reflsub-my-submissions',
+        'My Submissions',
+        'My Submissions',
+        'edit_posts',
+        'reflsub-my-submissions',
+        'reflsub_render_my_submissions_page'
+    );
+
+    add_submenu_page(
+        'reflsub-my-submissions',
         'New Post',
         'New Post',
         'edit_posts',
         'reflsub-new-post',
-        'reflsub_render_post_form',
-        'dashicons-edit',
-        27
+        'reflsub_render_post_form'
     );
 }
 
