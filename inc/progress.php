@@ -198,13 +198,18 @@ function reflsub_render_progress_page() {
                     <?php if ( $sub ) :
                         $sub_url    = get_permalink( $sub->ID );
                         $sub_date   = get_the_date( 'M j', $sub->ID );
-                        $sub_status = ucfirst( $sub->post_status );
+                        // A draft is unsubmitted work in progress. Giving it the same
+                        // check as a real submission would make a scan of this grid
+                        // read as "everyone is done" when they are not — so it gets a
+                        // hollow marker and says so on hover.
+                        $is_draft   = ( $sub->post_status === 'draft' );
+                        $sub_status = $is_draft ? 'Draft — not yet submitted' : ucfirst( $sub->post_status );
                     ?>
                     <a href="<?php echo esc_url( $sub_url ); ?>"
                        target="_blank"
                        title="<?php echo esc_attr( $sub_status ); ?> — <?php echo esc_attr( $sub_date ); ?>"
                        class="reflsub-status-check <?php echo esc_attr( 'is-' . $sub->post_status ); ?>">
-                        &#10003;
+                        <?php echo $is_draft ? '&#9675;' : '&#10003;'; ?>
                     </a><br>
                     <small class="reflsub-status-date"><?php echo esc_html( $sub_date ); ?></small>
                     <?php else : ?>
@@ -219,7 +224,8 @@ function reflsub_render_progress_page() {
         </div>
 
         <p class="reflsub-progress-legend">
-            &#10003; = submitted (click to edit). Color indicates status:
+            &#10003; = submitted &nbsp;·&nbsp; &#9675; = draft saved, not yet submitted
+            (click either to open). Color indicates status:
             <span class="reflsub-swatch is-publish">&#9632;</span> Published
             <span class="reflsub-swatch is-pending">&#9632;</span> Pending
             <span class="reflsub-swatch is-private">&#9632;</span> Private

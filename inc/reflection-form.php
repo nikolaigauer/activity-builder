@@ -464,6 +464,21 @@ function reflsub_handle_reflection_submission() {
 
 function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $redirect_base ) {
 
+    // ── Save-as-draft vs submit ────────────────────────────────────────────────
+    // Two submit buttons share the name reflsub_submit_action; anything other than
+    // an explicit "draft" is treated as a real submission, so an older cached form
+    // with no button name still submits normally.
+    // NB: deliberately NOT "reflsub_action" — admin-page.php already uses that
+    // name for the Submissions list approve/trash actions.
+    $is_draft = ( sanitize_key( $_POST['reflsub_submit_action'] ?? 'submit' ) === 'draft' );
+
+    // Status a real submission lands in, from the instructor's page setting.
+    // Needed in both the insert and the update path (a draft being submitted for
+    // the first time has to be promoted into it).
+    $privacy       = get_post_meta( $page_id, 'submission_privacy', true ) ?: 'publish';
+    $submit_status = in_array( $privacy, array( 'publish', 'private', 'pending' ), true )
+        ? $privacy : 'publish';
+
     // ── Edit mode detection ────────────────────────────────────────────────────
     $edit_post_id = intval( $_POST['reflsub_edit_post_id'] ?? 0 );
     if ( $edit_post_id > 0 ) {
@@ -712,7 +727,9 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
     }
 
     if ( ! $has_content ) {
-        wp_redirect( add_query_arg( 'reflection_error', 'empty', $redirect_base ) );
+        // A draft is allowed to be incomplete, but there is still nothing to store
+        // if every field is empty — say that rather than "fill in a response".
+        wp_redirect( add_query_arg( 'reflection_error', $is_draft ? 'empty_draft' : 'empty', $redirect_base ) );
         exit;
     }
 
@@ -732,25 +749,39 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
 
     // Create new post or update existing
     if ( $edit_post_id ) {
-        $result = wp_update_post( array(
+        $update = array(
             'ID'           => $edit_post_id,
             'post_title'   => $post_title,
             'post_content' => $post_content,
-        ), true );
+        );
+
+        // Status transitions on edit. Anything already submitted keeps whatever
+        // status it has — an instructor may have approved it (pending → publish),
+        // and re-editing must not silently undo that.
+        $current_status = get_post_status( $edit_post_id );
+        if ( $is_draft ) {
+            // Re-saving a draft keeps it a draft. Saving an already-submitted post
+            // as a draft would retract it from the instructor, so that is refused.
+            if ( $current_status === 'draft' ) {
+                $update['post_status'] = 'draft';
+            }
+        } elseif ( $current_status === 'draft' ) {
+            // Draft being handed in for the first time — promote it into the
+            // status the instructor configured for this page.
+            $update['post_status'] = $submit_status;
+        }
+
+        $result = wp_update_post( $update, true );
         if ( is_wp_error( $result ) ) {
             wp_redirect( add_query_arg( 'reflection_error', 'save', $redirect_base ) );
             exit;
         }
         $post_id = $edit_post_id;
     } else {
-        $privacy     = get_post_meta( $page_id, 'submission_privacy', true ) ?: 'publish';
-        $post_status = in_array( $privacy, array( 'publish', 'private', 'pending' ), true )
-            ? $privacy : 'publish';
-
         $post_id = wp_insert_post( array(
             'post_title'   => $post_title,
             'post_content' => $post_content,
-            'post_status'  => $post_status,
+            'post_status'  => $is_draft ? 'draft' : $submit_status,
             'post_author'  => $user_id,
             'post_type'    => 'post',
         ), true );
@@ -1020,6 +1051,19 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         }
     }
 
+    // Route on the status the post actually ended up in, not on the button alone,
+    // so a refused draft-save (see the status transitions above) still reports the
+    // truth to the student.
+    if ( $is_draft && get_post_status( $post_id ) === 'draft' ) {
+        // Land back in edit mode with the work still on screen: "save and keep
+        // going" is the common case, and a bare confirmation page would break it.
+        wp_redirect( add_query_arg( array(
+            'edit_submission'        => $post_id,
+            'reflection_draft_saved' => '1',
+        ), $redirect_base ) );
+        exit;
+    }
+
     $redirect_arg = $edit_post_id ? 'reflection_updated' : 'reflection_submitted';
     wp_redirect( add_query_arg( $redirect_arg, '1', $redirect_base ) );
     exit;
@@ -1082,6 +1126,9 @@ function reflsub_reflection_form_shortcode( $atts ) {
     if ( isset( $_GET['reflection_submitted'] ) ) {
         $user        = wp_get_current_user();
         $archive_url = get_author_posts_url( $user->ID );
+        // See the sections-path success branch: the JS owns localStorage cleanup,
+        // so it must load on the success page as well.
+        reflsub_enqueue_form_assets();
         ob_start();
         ?>
         <div class="reflection-notice reflection-success">
@@ -1258,6 +1305,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         $updated     = isset( $_GET['reflection_updated'] );
         $user        = wp_get_current_user();
         $archive_url = get_author_posts_url( $user->ID );
+        // The JS carries the localStorage autosave cleanup, and this branch is the
+        // only place that knows the submission landed — so the assets have to load
+        // here too. Without this the draft key survives a successful submit and is
+        // restored into the next submission on resubmission-enabled pages.
+        reflsub_enqueue_form_assets();
         ob_start();
         ?>
         <div class="reflection-notice reflection-success">
@@ -1298,6 +1350,11 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
     }
 
+    // An unsubmitted draft is still "in progress", so the form presents as a first
+    // submission (Submit, not Update Submission) rather than as editing something
+    // the instructor has already seen.
+    $editing_draft = $edit_post_id && get_post_status( $edit_post_id ) === 'draft';
+
     // ── Duplicate guard (bypassed when editing an existing submission) ──────────
     if ( ! $allow_resub && ! $edit_post_id ) {
         $existing = reflsub_get_existing_submission( $user_id, $page_id );
@@ -1312,9 +1369,23 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             $edit_link = add_query_arg( 'edit_submission', $existing->ID, get_permalink( $page_id ) );
             $view_url  = $existing->post_status === 'publish' ? get_permalink( $existing->ID ) : null;
 
+            // A saved draft is not a submission. reflsub_get_existing_submission()
+            // counts drafts (deliberately — one work-in-progress per page), so
+            // without this branch a student who saved a draft would be told they
+            // had already submitted.
+            $is_draft = ( $existing->post_status === 'draft' );
+
             ob_start();
             ?>
-            <div class="reflection-notice reflection-duplicate">
+            <div class="reflection-notice <?php echo $is_draft ? 'reflection-info' : 'reflection-duplicate'; ?>">
+                <?php if ( $is_draft ) : ?>
+                <p><strong>You have a saved draft for this page.</strong></p>
+                <p>
+                    It has not been submitted yet.
+                    &nbsp;·&nbsp;
+                    <a href="<?php echo esc_url( $edit_link ); ?>">Continue your draft</a>
+                </p>
+                <?php else : ?>
                 <p><strong>You have already submitted a reflection for this page.</strong></p>
                 <p>
                     Status: <strong><?php echo esc_html( $status ); ?></strong>
@@ -1325,6 +1396,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                         <a href="<?php echo esc_url( $view_url ); ?>">View it</a>
                     <?php endif; ?>
                 </p>
+                <?php endif; ?>
             </div>
             <?php
             return ob_get_clean();
@@ -1337,6 +1409,9 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         switch ( $_GET['reflection_error'] ) {
             case 'empty':
                 $error_msg = 'Please fill in at least one response before submitting.';
+                break;
+            case 'empty_draft':
+                $error_msg = 'There is nothing to save yet — write something first, then save your draft.';
                 break;
             case 'duplicate':
                 $error_msg = 'You have already submitted a reflection for this page.';
@@ -1387,6 +1462,28 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         }
     }
 
+    // ── Unfinished draft on a resubmission-enabled page ────────────────────────
+    // The duplicate guard above is skipped entirely when resubmission is allowed,
+    // so a saved draft would never be surfaced here: the student would land on a
+    // blank form and their unfinished work would only be findable from My
+    // Submissions. Offer it as a banner rather than a wall, since starting a new
+    // entry is legitimate on these pages.
+    $pending_draft = null;
+    if ( ! $edit_post_id ) {
+        $drafts = get_posts( array(
+            'post_type'      => 'post',
+            'author'         => $user_id,
+            'post_status'    => 'draft',
+            'posts_per_page' => 1,
+            'orderby'        => 'modified',
+            'order'          => 'DESC',
+            'meta_query'     => array(
+                array( 'key' => '_reflection_source_page', 'value' => $page_id ),
+            ),
+        ) );
+        $pending_draft = $drafts ? $drafts[0] : null;
+    }
+
     // Intro text stored in post_excerpt by the builder
     $page_post = get_post( $page_id );
     $intro     = $page_post ? trim( $page_post->post_excerpt ) : '';
@@ -1407,6 +1504,16 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         </div>
         <?php endif; ?>
 
+        <?php if ( $pending_draft ) : ?>
+        <div class="reflection-notice reflection-info">
+            <p>
+                <strong>You have an unfinished draft for this page.</strong>
+                <a href="<?php echo esc_url( add_query_arg( 'edit_submission', $pending_draft->ID, get_permalink( $page_id ) ) ); ?>">Continue your draft</a>
+                — or start a new entry below.
+            </p>
+        </div>
+        <?php endif; ?>
+
         <form class="reflection-form" method="post"<?php echo $form_enctype; ?> data-page-id="<?php echo esc_attr( $page_id ); ?>" data-user-id="<?php echo esc_attr( $user_id ); ?>">
 
             <?php wp_nonce_field( 'submit_reflection', 'reflection_nonce' ); ?>
@@ -1416,7 +1523,18 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             <input type="hidden" name="reflsub_edit_post_id" value="<?php echo esc_attr( $edit_post_id ); ?>">
             <?php endif; ?>
 
-            <?php if ( $edit_post_id ) : ?>
+            <?php if ( isset( $_GET['reflection_draft_saved'] ) ) : ?>
+            <div class="reflection-notice reflection-success" style="margin-bottom:1.5rem;">
+                <p><strong>Draft saved.</strong> You can close this page and come back to finish later —
+                   your work is stored on the site, not just in this browser.
+                   Nothing is sent to your instructor until you click <strong>Submit</strong>.</p>
+            </div>
+            <?php elseif ( $editing_draft ) : ?>
+            <div class="reflection-notice reflection-info" style="margin-bottom:1.5rem;">
+                <p>You are continuing a saved draft. It has not been submitted yet — click
+                   <strong>Submit</strong> when you are ready to hand it in.</p>
+            </div>
+            <?php elseif ( $edit_post_id ) : ?>
             <div class="reflection-notice reflection-info" style="margin-bottom:1.5rem;">
                 <p>You are editing your submission. Make your changes and click <strong>Update Submission</strong>.</p>
             </div>
@@ -1468,13 +1586,17 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                           name="<?php echo esc_attr( $field_id ); ?>"
                           rows="6"
                           placeholder="Write your response here…"
-                          <?php if ( $word_limit ) : ?>data-word-limit="<?php echo esc_attr( $word_limit ); ?>" data-counter-id="<?php echo esc_attr( $counter_id ); ?>"<?php endif; ?>
+                          data-counter-id="<?php echo esc_attr( $counter_id ); ?>"
+                          <?php if ( $word_limit ) : ?>data-word-limit="<?php echo esc_attr( $word_limit ); ?>"<?php endif; ?>
                           <?php if ( $required ) : ?>required<?php endif; ?>><?php echo esc_textarea( $prefill[ $i ] ?? '' ); ?></textarea>
-                <?php if ( $word_limit ) : ?>
+                <?php // Counter renders unconditionally — a running word count is useful
+                      // for long-form writing even when the instructor set no limit.
+                      // JS fills in the live value; this is the no-JS/pre-hydration state. ?>
                 <p class="reflection-hint">
-                    <span id="<?php echo esc_attr( $counter_id ); ?>" style="color:#646970;">0 / <?php echo esc_html( $word_limit ); ?> words</span>
+                    <span id="<?php echo esc_attr( $counter_id ); ?>" style="color:#646970;"><?php
+                        echo $word_limit ? '0 / ' . esc_html( $word_limit ) . ' words' : '0 words';
+                    ?></span>
                 </p>
-                <?php endif; ?>
             </div>
 
             <?php elseif ( $type === 'mcq' ) :
@@ -1785,9 +1907,25 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             <?php endif; ?>
 
             <div class="reflection-submit">
-                <button type="submit" class="wp-element-button">
-                    <?php echo $edit_post_id ? 'Update Submission' : 'Submit'; ?>
+                <button type="submit" name="reflsub_submit_action" value="submit" class="wp-element-button">
+                    <?php echo ( $edit_post_id && ! $editing_draft ) ? 'Update Submission' : 'Submit'; ?>
                 </button>
+                <?php // Only offered while the work is still unsubmitted. Once a submission
+                      // exists, "Save as Draft" would read as retracting it from the
+                      // instructor — which this deliberately does not do.
+                      // formnovalidate: a draft is explicitly incomplete work, so required
+                      // fields must not block saving it. The handler still refuses a save
+                      // with nothing in it at all.
+                      if ( ! $edit_post_id || $editing_draft ) : ?>
+                <button type="submit" name="reflsub_submit_action" value="draft"
+                        class="reflsub-draft-btn" formnovalidate>
+                    Save as Draft
+                </button>
+                <p class="reflection-hint reflsub-draft-hint">
+                    Saving a draft stores your work on the site so you can finish it on another
+                    device or another day. Your instructor does not see it until you submit.
+                </p>
+                <?php endif; ?>
             </div>
 
         </form>

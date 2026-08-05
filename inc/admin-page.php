@@ -295,7 +295,10 @@ function reflsub_render_submissions_page() {
                               <?php echo $has_feedback ? 'color:#00a32a; border-color:#00a32a;' : ''; ?>">
                         <?php echo $has_feedback ? '● Feedback' : 'Feedback'; ?>
                     </a>
-                    <?php if ( in_array( $sub->post_status, array( 'pending', 'private', 'draft' ) ) ) : ?>
+                    <?php // 'draft' is deliberately excluded: a draft is work the student
+                          // has NOT handed in, and Approve publishes. Approving one would
+                          // publish private work-in-progress on the student's behalf.
+                          if ( in_array( $sub->post_status, array( 'pending', 'private' ) ) ) : ?>
                     <form method="post" style="margin:0;">
                         <?php wp_nonce_field( 'reflsub_submission_action', 'reflsub_nonce' ); ?>
                         <input type="hidden" name="reflsub_action"  value="approve">

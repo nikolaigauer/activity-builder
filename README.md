@@ -43,7 +43,9 @@ Instructors build activity and reflection prompt pages using a section-based vis
 
 ### For Students
 - Rich text responses, image uploads, PDF attachments, video URLs, and embedded content — all configurable per section.
-- Autosave draft (localStorage) with restore notice on reload.
+- **Save as Draft** — save unfinished work to the site and come back to it on another day or another device. Drafts stay invisible to the instructor until submitted.
+- Autosave draft (localStorage) with restore notice on reload, as a second safety net.
+- **Auto-growing response fields** with a live word count, so long-form writing isn't cramped into a fixed box.
 - Friendly client-side file size guard before submission.
 
 ---

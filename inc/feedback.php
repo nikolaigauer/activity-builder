@@ -445,8 +445,11 @@ function reflsub_render_my_submissions_page() {
                        class="button button-small" target="_blank">View</a>
                     <?php endif; ?>
                     <?php if ( $edit_url ) : ?>
+                    <?php // An unsubmitted draft is resumed, not edited. ?>
                     <a href="<?php echo esc_url( $edit_url ); ?>"
-                       class="button button-small">Edit</a>
+                       class="button button-small"><?php
+                        echo $sub->post_status === 'draft' ? 'Continue' : 'Edit';
+                    ?></a>
                     <?php endif; ?>
                 </div>
             </div>

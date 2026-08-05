@@ -15,15 +15,58 @@
         var MAX_FILE_MB = 15;
         var MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 
+        // ── Auto-growing textareas ─────────────────────────────────────────────
+        // A fixed 6-row box is fine for a paragraph and hostile for an essay, so
+        // grow to fit the content — but only up to a ceiling. An unbounded
+        // textarea pushes the Submit button several screens down, which is its
+        // own usability problem; past the ceiling the field scrolls internally.
+        // A delegated listener plus an init pass means dynamically added student
+        // blocks are covered without extra wiring.
+        var AUTOGROW_MAX_FRACTION = 0.6; // of viewport height
+
+        function reflsubAutoGrow(ta) {
+            var max = Math.round(window.innerHeight * AUTOGROW_MAX_FRACTION);
+            ta.style.height = 'auto';
+            // box-sizing is border-box, so scrollHeight (content + padding) needs
+            // the borders added back to land on the correct border-box height.
+            var border = ta.offsetHeight - ta.clientHeight;
+            var target = ta.scrollHeight + border;
+            if ( target > max ) {
+                ta.style.height    = max + 'px';
+                ta.style.overflowY = 'auto';
+            } else {
+                ta.style.height    = target + 'px';
+                ta.style.overflowY = 'hidden';
+            }
+        }
+
+        function reflsubAutoGrowAll() {
+            document.querySelectorAll('.reflection-form textarea').forEach(reflsubAutoGrow);
+        }
+
+        document.addEventListener('input', function(e) {
+            if ( e.target && e.target.tagName === 'TEXTAREA'
+                 && e.target.closest && e.target.closest('.reflection-form') ) {
+                reflsubAutoGrow(e.target);
+            }
+        });
+        reflsubAutoGrowAll();
+
         // ── Word counters ──────────────────────────────────────────────────────
-        document.querySelectorAll('.reflection-form textarea[data-word-limit]').forEach(function(ta) {
-            var limit   = parseInt(ta.dataset.wordLimit, 10);
+        // Shown for every prompt field; the "/ limit" half only appears when the
+        // instructor set one. A running count is reassuring for long-form writing
+        // even with no limit to measure against.
+        document.querySelectorAll('.reflection-form textarea[data-counter-id]').forEach(function(ta) {
             var counter = document.getElementById(ta.dataset.counterId);
-            if (!counter || !limit) return;
+            if (!counter) return;
+            var limit = parseInt(ta.dataset.wordLimit, 10) || 0;
             function update() {
-                var words = ta.value.trim() === '' ? 0 : ta.value.trim().split(/\s+/).length;
-                counter.textContent = words + ' / ' + limit + ' words';
-                counter.style.color = words > limit ? '#d63638' : '#646970';
+                var trimmed = ta.value.trim();
+                var words   = trimmed === '' ? 0 : trimmed.split(/\s+/).length;
+                counter.textContent = limit
+                    ? words + ' / ' + limit + ' words'
+                    : words + ( words === 1 ? ' word' : ' words' );
+                counter.style.color = ( limit && words > limit ) ? '#d63638' : '#646970';
             }
             ta.addEventListener('input', update);
             update();
@@ -37,9 +80,13 @@
         // Clean up any legacy un-scoped key left by earlier builds.
         if ( form ) { try { localStorage.removeItem( 'reflsub_draft_' + form.dataset.pageId ); } catch(e) {} }
 
+        // States where the server now holds the text, so the local copy is stale
+        // and must not be restored over it: a completed submit, a completed edit,
+        // or a saved server-side draft.
+        var REFLSUB_TERMINAL = /(?:reflection_submitted|reflection_updated|reflection_draft_saved)=1/;
+
         if ( draftKey ) {
-            if ( window.location.search.indexOf('reflection_submitted=1') !== -1 ) {
-                // Successful submit — wipe the draft
+            if ( REFLSUB_TERMINAL.test( window.location.search ) ) {
                 localStorage.removeItem( draftKey );
             } else {
                 // Restore draft if one exists
@@ -55,6 +102,9 @@
                         }
                     });
                     if ( anyRestored ) {
+                        // Restored text changes how tall each field needs to be.
+                        reflsubAutoGrowAll();
+
                         var notice = document.createElement('div');
                         notice.className = 'reflection-notice reflection-info';
                         notice.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1.5rem;';
@@ -65,26 +115,29 @@
                             localStorage.removeItem( draftKey );
                             notice.remove();
                             form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) { el.value = ''; });
+                            reflsubAutoGrowAll();
                         });
                     }
                 }
-
-                // Save on input, debounced 2 s
-                var saveTimer;
-                function reflsubSaveDraft() {
-                    var data = {};
-                    form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                        if ( el.name ) data[el.name] = el.value;
-                    });
-                    try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
-                }
-                form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                    el.addEventListener('input', function() {
-                        clearTimeout(saveTimer);
-                        saveTimer = setTimeout( reflsubSaveDraft, 2000 );
-                    });
-                });
             }
+
+            // Save on input, debounced 2 s. Attached in every state — including
+            // just after a server-side draft save — so typing resumed on the
+            // reloaded form keeps its local safety net.
+            var saveTimer;
+            function reflsubSaveDraft() {
+                var data = {};
+                form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
+                    if ( el.name ) data[el.name] = el.value;
+                });
+                try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
+            }
+            form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
+                el.addEventListener('input', function() {
+                    clearTimeout(saveTimer);
+                    saveTimer = setTimeout( reflsubSaveDraft, 2000 );
+                });
+            });
         }
 
         // ── Total upload size guard ────────────────────────────────────────────

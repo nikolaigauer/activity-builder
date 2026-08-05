@@ -191,7 +191,40 @@
 .reflsub-drop-count {
     font-size: 0.8rem; color: var(--rs-ok); font-weight: 600; margin-top: 0.5rem;
 }
-.reflection-submit { margin-top: 1.5rem; }
+.reflection-submit {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+/* Secondary to the theme-styled .wp-element-button submit: saving a draft is the
+   quieter of the two actions and should not compete with handing work in. */
+.reflection-submit .reflsub-draft-btn {
+    background: transparent;
+    color: var(--rs-g700);
+    border: 1px solid var(--rs-line);
+    border-radius: var(--rs-r-sm);
+    padding: 0.7rem 1.25rem;
+    font-size: 1rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background var(--rs-t), border-color var(--rs-t);
+}
+.reflection-submit .reflsub-draft-btn:hover {
+    background: var(--rs-g100);
+    border-color: var(--rs-g500);
+}
+.reflection-submit .reflsub-draft-btn:focus-visible {
+    outline: none;
+    border-color: var(--rs-focus);
+    box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.15);
+}
+/* Full-width so it drops onto its own line under both buttons. */
+.reflection-submit .reflsub-draft-hint {
+    flex-basis: 100%;
+    margin: 0;
+}
 .reflection-notice {
     padding: 1rem 1.5rem;
     border-radius: 4px;
