@@ -108,7 +108,13 @@ function reflsub_maybe_enqueue_form_style() {
 // through the_content / wptexturize — which would corrupt && into &#038;&#038;.
 // Both render paths share the one element-guarded JS file.
 
-function reflsub_enqueue_form_assets() {
+// $page_id must be passed by every caller. The localStorage autosave key is built
+// from it, and the JS needs that key on pages where NO form is rendered — the
+// post-submit success screen is exactly such a page, and it is where the stale
+// draft has to be cleared. Deriving the key from the form element instead means
+// the cleanup silently no-ops there and last entry's text is restored into the
+// next one on resubmission-enabled pages.
+function reflsub_enqueue_form_assets( $page_id = 0 ) {
     // Shared audio recorder widget (also used by the New Post builder).
     reflsub_enqueue_audio_recorder();
 
@@ -126,6 +132,8 @@ function reflsub_enqueue_form_assets() {
     );
     wp_localize_script( 'reflsub-reflection-form', 'reflsubForm', array(
         'postMaxBytes' => (int) wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) ),
+        'pageId'       => (int) ( $page_id ?: get_the_ID() ),
+        'userId'       => (int) get_current_user_id(),
     ) );
 }
 

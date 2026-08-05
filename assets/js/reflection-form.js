@@ -73,12 +73,25 @@
         });
 
         // ── LocalStorage autosave ─────────────────────────────────────────────
-        var form     = document.querySelector('.reflection-form[data-page-id]');
-        // Key is scoped to both page and logged-in user — prevents draft leaking
-        // between users on shared machines / lab computers.
-        var draftKey = form ? 'reflsub_draft_' + form.dataset.pageId + '_' + form.dataset.userId : null;
+        var form = document.querySelector('.reflection-form[data-page-id]');
+
+        // The key is built from PHP-localized ids, NOT from the form element.
+        // The success screen renders no form, and that is precisely the page where
+        // the stale draft must be cleared — deriving the key from the form makes
+        // the cleanup below a silent no-op there, so the previous entry's text gets
+        // restored into the next one on resubmission-enabled pages.
+        // Scoped to page AND user so drafts never leak between students on a
+        // shared lab machine. The form dataset is a fallback for cached pages
+        // served before the localized ids existed.
+        var reflsubCfg = window.reflsubForm || {};
+        var draftPage  = reflsubCfg.pageId || ( form && form.dataset.pageId );
+        var draftUser  = reflsubCfg.userId || ( form && form.dataset.userId );
+        var draftKey   = ( draftPage && draftUser )
+            ? 'reflsub_draft_' + draftPage + '_' + draftUser
+            : null;
+
         // Clean up any legacy un-scoped key left by earlier builds.
-        if ( form ) { try { localStorage.removeItem( 'reflsub_draft_' + form.dataset.pageId ); } catch(e) {} }
+        if ( draftPage ) { try { localStorage.removeItem( 'reflsub_draft_' + draftPage ); } catch(e) {} }
 
         // States where the server now holds the text, so the local copy is stale
         // and must not be restored over it: a completed submit, a completed edit,
@@ -87,8 +100,9 @@
 
         if ( draftKey ) {
             if ( REFLSUB_TERMINAL.test( window.location.search ) ) {
+                // Runs whether or not a form is on the page — this is the fix.
                 localStorage.removeItem( draftKey );
-            } else {
+            } else if ( form ) {
                 // Restore draft if one exists
                 var saved = null;
                 try { saved = JSON.parse( localStorage.getItem( draftKey ) ); } catch(e) {}
@@ -121,23 +135,26 @@
                 }
             }
 
-            // Save on input, debounced 2 s. Attached in every state — including
-            // just after a server-side draft save — so typing resumed on the
-            // reloaded form keeps its local safety net.
-            var saveTimer;
-            function reflsubSaveDraft() {
-                var data = {};
+            // Save on input, debounced 2 s. Attached in every state that HAS a form
+            // — including just after a server-side draft save — so typing resumed on
+            // the reloaded form keeps its local safety net. Guarded because the
+            // success screen reaches this block with no form on the page.
+            if ( form ) {
+                var saveTimer;
+                var reflsubSaveDraft = function () {
+                    var data = {};
+                    form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
+                        if ( el.name ) data[el.name] = el.value;
+                    });
+                    try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
+                };
                 form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                    if ( el.name ) data[el.name] = el.value;
+                    el.addEventListener('input', function() {
+                        clearTimeout(saveTimer);
+                        saveTimer = setTimeout( reflsubSaveDraft, 2000 );
+                    });
                 });
-                try { localStorage.setItem( draftKey, JSON.stringify(data) ); } catch(e) {}
             }
-            form.querySelectorAll('textarea, input[type="text"]').forEach(function(el) {
-                el.addEventListener('input', function() {
-                    clearTimeout(saveTimer);
-                    saveTimer = setTimeout( reflsubSaveDraft, 2000 );
-                });
-            });
         }
 
         // ── Total upload size guard ────────────────────────────────────────────

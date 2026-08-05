@@ -1210,7 +1210,7 @@ function reflsub_reflection_form_shortcode( $atts ) {
         $archive_url = get_author_posts_url( $user->ID );
         // See the sections-path success branch: the JS owns localStorage cleanup,
         // so it must load on the success page as well.
-        reflsub_enqueue_form_assets();
+        reflsub_enqueue_form_assets( $page_id );
         ob_start();
         ?>
         <div class="reflection-notice reflection-success">
@@ -1219,7 +1219,7 @@ function reflsub_reflection_form_shortcode( $atts ) {
                 <a href="<?php echo esc_url( $archive_url ); ?>">View your posts →</a>
                 <?php if ( $allow_resub ) : ?>
                     &nbsp;·&nbsp;
-                    <a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Submit another</a>
+                    <a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Start another entry</a>
                 <?php endif; ?>
             </p>
         </div>
@@ -1379,7 +1379,7 @@ function reflsub_reflection_form_shortcode( $atts ) {
     </div>
 
 
-    <?php reflsub_enqueue_form_assets(); ?>
+    <?php reflsub_enqueue_form_assets( $page_id ); ?>
     <?php
 
     return ob_get_clean();
@@ -1401,7 +1401,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         // only place that knows the submission landed — so the assets have to load
         // here too. Without this the draft key survives a successful submit and is
         // restored into the next submission on resubmission-enabled pages.
-        reflsub_enqueue_form_assets();
+        reflsub_enqueue_form_assets( $page_id );
         ob_start();
         ?>
         <div class="reflection-notice reflection-success">
@@ -1410,7 +1410,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                 <a href="<?php echo esc_url( $archive_url ); ?>">View your posts →</a>
                 <?php if ( $allow_resub && ! $updated ) : ?>
                     &nbsp;·&nbsp;
-                    <a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Submit another</a>
+                    <a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Start another entry</a>
                 <?php endif; ?>
             </p>
         </div>
@@ -2036,7 +2036,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
     </div>
 
 
-    <?php reflsub_enqueue_form_assets(); ?>
+    <?php reflsub_enqueue_form_assets( $page_id ); ?>
     <?php
 
     return ob_get_clean();
