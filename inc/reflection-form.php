@@ -81,6 +81,34 @@ function reflsub_retarget_submission_edit_link( $link, $post_id, $context = '' )
 }
 
 
+// Because the main "Edit" action now points at the activity form for these users,
+// the block editor would otherwise have no visible route from the Posts list.
+// This adds it back as an explicit second choice: the friendly editor stays the
+// default, the powerful one stays one click away and clearly labelled.
+// Only added where the Edit link was actually retargeted — for anyone who can
+// manage_options, "Edit" already goes to the block editor.
+add_filter( 'post_row_actions', 'reflsub_add_block_editor_row_action', 10, 2 );
+function reflsub_add_block_editor_row_action( $actions, $post ) {
+    if ( $post->post_type !== 'post' || current_user_can( 'manage_options' ) ) {
+        return $actions;
+    }
+    if ( ! get_post_meta( $post->ID, '_reflection_source_page', true ) ) {
+        return $actions; // not an Activity Builder submission
+    }
+    if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+        return $actions;
+    }
+
+    $actions['reflsub_block_editor'] = sprintf(
+        '<a href="%s">%s</a>',
+        esc_url( admin_url( 'post.php?post=' . $post->ID . '&action=edit' ) ),
+        esc_html( 'Block editor' )
+    );
+
+    return $actions;
+}
+
+
 // Anyone who reaches the block editor for a submission anyway — via the Posts
 // list, a bookmark, or as an admin — gets a way back to the activity form.
 add_action( 'admin_notices', 'reflsub_submission_editor_notice' );
