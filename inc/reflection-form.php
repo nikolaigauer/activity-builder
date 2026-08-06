@@ -137,6 +137,99 @@ function reflsub_submission_editor_notice() {
 }
 
 
+// A student must always be able to read back their own work, whatever status it
+// is sitting in — that is the whole point of the submission list. WordPress
+// already permits this: map_meta_cap() collapses `read_post` to plain `read` for
+// the post's own author, and preview covers the statuses with no public URL. So
+// the only thing that ever varies is which URL to build and what to honestly
+// call it, which is what this function centralises. It previously lived as a
+// `post_status === 'publish' ? permalink : null` ternary copied into three
+// screens, which silently left private and pending submissions with no route at
+// all.
+//
+// Returns null when there is no sensible "go and look at it" link, so callers
+// can keep using `if ( $link )` to decide whether to render a button.
+//
+// @return array{url:string,label:string,hint:string}|null
+function reflsub_submission_view_link( $post ) {
+    $post = get_post( $post );
+
+    // Also guards get_permalink() below: for a private post it only returns the
+    // real permalink when the *current* user may read it, and falls back to the
+    // plain ?p= form otherwise.
+    if ( ! $post || ! current_user_can( 'read_post', $post->ID ) ) {
+        return null;
+    }
+
+    switch ( $post->post_status ) {
+
+        case 'publish':
+            return array(
+                'url'   => get_permalink( $post->ID ),
+                'label' => 'View',
+                'hint'  => '',
+            );
+
+        case 'private':
+            // Published, but audience-restricted. It has a normal permalink and
+            // deliberately never appears on the student's public author archive.
+            return array(
+                'url'   => get_permalink( $post->ID ),
+                'label' => 'View',
+                'hint'  => 'Only you and your instructor can see this.',
+            );
+
+        case 'pending':
+            // No public URL yet, so preview is the only honest route. Preview is
+            // an edit-side capability, hence the second check.
+            if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+                return null;
+            }
+            return array(
+                'url'   => get_preview_post_link( $post->ID ),
+                'label' => 'Preview',
+                'hint'  => 'Not published yet — visible to you and your instructor while it awaits approval.',
+            );
+    }
+
+    // Drafts fall through deliberately. A draft is unsubmitted work, and the
+    // established affordance for it across this plugin is "Continue", not
+    // "View" — see the draft branch in the duplicate guard below. (The preview
+    // URL does work for drafts if that ever becomes wanted.)
+    return null;
+}
+
+
+// Which submission is the success screen reporting on? The ID rides back on the
+// query string after the Post/Redirect/Get, so treat it as untrusted: it must be
+// a real post, owned by whoever is looking, and belong to this activity page.
+// Anything else returns null and the caller falls back to its generic links —
+// which is also what happens to an old bookmarked `?reflection_submitted=1`.
+function reflsub_resolve_submitted_post( $page_id ) {
+    $raw = 0;
+    if ( isset( $_GET['reflection_submitted'] ) ) {
+        $raw = intval( $_GET['reflection_submitted'] );
+    } elseif ( isset( $_GET['reflection_updated'] ) ) {
+        $raw = intval( $_GET['reflection_updated'] );
+    }
+
+    if ( $raw < 1 ) {
+        return null;
+    }
+
+    $post = get_post( $raw );
+    if ( ! $post || (int) $post->post_author !== get_current_user_id() ) {
+        return null;
+    }
+
+    if ( (int) get_post_meta( $post->ID, '_reflection_source_page', true ) !== (int) $page_id ) {
+        return null;
+    }
+
+    return $post;
+}
+
+
 function reflsub_sanitize_embed_code( $raw ) {
     $allowed = array(
         'iframe' => array(
@@ -555,8 +648,11 @@ function reflsub_handle_reflection_submission() {
         }
     }
 
-    // Post/Redirect/Get — back to the submission page
-    wp_redirect( add_query_arg( 'reflection_submitted', '1', $redirect_base ) );
+    // Post/Redirect/Get — back to the submission page. Carries the new post's ID
+    // rather than a bare '1' so the success screen can link straight at the work
+    // that was just saved; a private or pending submission will not show up on the
+    // author archive, which used to be the only link offered there.
+    wp_redirect( add_query_arg( 'reflection_submitted', $post_id, $redirect_base ) );
     exit;
 }
 
@@ -1174,8 +1270,10 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
         exit;
     }
 
+    // The ID (not a bare '1') so the success screen can link at the actual post —
+    // see the note on the legacy handler's redirect above.
     $redirect_arg = $edit_post_id ? 'reflection_updated' : 'reflection_submitted';
-    wp_redirect( add_query_arg( $redirect_arg, '1', $redirect_base ) );
+    wp_redirect( add_query_arg( $redirect_arg, $post_id, $redirect_base ) );
     exit;
 }
 
@@ -1234,8 +1332,9 @@ function reflsub_reflection_form_shortcode( $atts ) {
 
     // ── Success state ──────────────────────────────────────────────────────────
     if ( isset( $_GET['reflection_submitted'] ) ) {
-        $user        = wp_get_current_user();
-        $archive_url = get_author_posts_url( $user->ID );
+        $submitted = reflsub_resolve_submitted_post( $page_id );
+        $view_link = $submitted ? reflsub_submission_view_link( $submitted ) : null;
+        $mine_url  = admin_url( 'admin.php?page=reflsub-my-submissions' );
         // See the sections-path success branch: the JS owns localStorage cleanup,
         // so it must load on the success page as well.
         reflsub_enqueue_form_assets( $page_id );
@@ -1244,12 +1343,19 @@ function reflsub_reflection_form_shortcode( $atts ) {
         <div class="reflection-notice reflection-success">
             <p><strong>Your reflection has been submitted.</strong></p>
             <p>
-                <a href="<?php echo esc_url( $archive_url ); ?>">View your posts →</a>
+                <?php if ( $view_link ) : ?>
+                <a href="<?php echo esc_url( $view_link['url'] ); ?>">View your submission →</a>
+                &nbsp;·&nbsp;
+                <?php endif; ?>
+                <a href="<?php echo esc_url( $mine_url ); ?>">All my submissions →</a>
                 <?php if ( $allow_resub ) : ?>
                     &nbsp;·&nbsp;
                     <a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Start another entry</a>
                 <?php endif; ?>
             </p>
+            <?php if ( $view_link && $view_link['hint'] ) : ?>
+            <p class="reflection-notice-hint"><?php echo esc_html( $view_link['hint'] ); ?></p>
+            <?php endif; ?>
         </div>
         <?php
         return ob_get_clean();
@@ -1287,10 +1393,8 @@ function reflsub_reflection_form_shortcode( $atts ) {
                 'draft'   => 'Draft',
             );
             $status   = $status_labels[ $existing->post_status ] ?? ucfirst( $existing->post_status );
-            $edit_url = get_edit_post_link( $existing->ID );
-            $view_url = ( $existing->post_status === 'publish' )
-                ? get_permalink( $existing->ID )
-                : null;
+            $edit_url  = get_edit_post_link( $existing->ID );
+            $view_link = reflsub_submission_view_link( $existing );
 
             ob_start();
             ?>
@@ -1302,11 +1406,16 @@ function reflsub_reflection_form_shortcode( $atts ) {
                     <?php if ( $edit_url ) : ?>
                         <a href="<?php echo esc_url( $edit_url ); ?>">Edit your submission</a>
                     <?php endif; ?>
-                    <?php if ( $view_url ) : ?>
+                    <?php if ( $view_link ) : ?>
                         &nbsp;·&nbsp;
-                        <a href="<?php echo esc_url( $view_url ); ?>">View it</a>
+                        <a href="<?php echo esc_url( $view_link['url'] ); ?>"><?php
+                            echo esc_html( $view_link['label'] === 'Preview' ? 'Preview it' : 'View it' );
+                        ?></a>
                     <?php endif; ?>
                 </p>
+                <?php if ( $view_link && $view_link['hint'] ) : ?>
+                <p class="reflection-notice-hint"><?php echo esc_html( $view_link['hint'] ); ?></p>
+                <?php endif; ?>
             </div>
             <?php
             return ob_get_clean();
@@ -1423,8 +1532,9 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
     // ── Success / update state ─────────────────────────────────────────────────
     if ( isset( $_GET['reflection_submitted'] ) || isset( $_GET['reflection_updated'] ) ) {
         $updated     = isset( $_GET['reflection_updated'] );
-        $user        = wp_get_current_user();
-        $archive_url = get_author_posts_url( $user->ID );
+        $submitted   = reflsub_resolve_submitted_post( $page_id );
+        $view_link   = $submitted ? reflsub_submission_view_link( $submitted ) : null;
+        $mine_url    = admin_url( 'admin.php?page=reflsub-my-submissions' );
         // The JS carries the localStorage autosave cleanup, and this branch is the
         // only place that knows the submission landed — so the assets have to load
         // here too. Without this the draft key survives a successful submit and is
@@ -1435,12 +1545,19 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
         <div class="reflection-notice reflection-success">
             <p><strong><?php echo $updated ? 'Your submission has been updated.' : 'Your reflection has been submitted.'; ?></strong></p>
             <p>
-                <a href="<?php echo esc_url( $archive_url ); ?>">View your posts →</a>
+                <?php if ( $view_link ) : ?>
+                <a href="<?php echo esc_url( $view_link['url'] ); ?>">View your submission →</a>
+                &nbsp;·&nbsp;
+                <?php endif; ?>
+                <a href="<?php echo esc_url( $mine_url ); ?>">All my submissions →</a>
                 <?php if ( $allow_resub && ! $updated ) : ?>
                     &nbsp;·&nbsp;
                     <a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>">Start another entry</a>
                 <?php endif; ?>
             </p>
+            <?php if ( $view_link && $view_link['hint'] ) : ?>
+            <p class="reflection-notice-hint"><?php echo esc_html( $view_link['hint'] ); ?></p>
+            <?php endif; ?>
         </div>
         <?php
         return ob_get_clean();
@@ -1499,7 +1616,7 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
             );
             $status    = $status_labels[ $existing->post_status ] ?? ucfirst( $existing->post_status );
             $edit_link = add_query_arg( 'edit_submission', $existing->ID, get_permalink( $page_id ) );
-            $view_url  = $existing->post_status === 'publish' ? get_permalink( $existing->ID ) : null;
+            $view_link = reflsub_submission_view_link( $existing );
 
             // A saved draft is not a submission. reflsub_get_existing_submission()
             // counts drafts (deliberately — one work-in-progress per page), so
@@ -1523,11 +1640,16 @@ function reflsub_render_sections_form( $sections, $page_id, $allow_resub ) {
                     Status: <strong><?php echo esc_html( $status ); ?></strong>
                     &nbsp;·&nbsp;
                     <a href="<?php echo esc_url( $edit_link ); ?>">Edit your submission</a>
-                    <?php if ( $view_url ) : ?>
+                    <?php if ( $view_link ) : ?>
                         &nbsp;·&nbsp;
-                        <a href="<?php echo esc_url( $view_url ); ?>">View it</a>
+                        <a href="<?php echo esc_url( $view_link['url'] ); ?>"><?php
+                            echo esc_html( $view_link['label'] === 'Preview' ? 'Preview it' : 'View it' );
+                        ?></a>
                     <?php endif; ?>
                 </p>
+                <?php if ( $view_link && $view_link['hint'] ) : ?>
+                <p class="reflection-notice-hint"><?php echo esc_html( $view_link['hint'] ); ?></p>
+                <?php endif; ?>
                 <?php endif; ?>
             </div>
             <?php

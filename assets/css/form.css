@@ -231,6 +231,12 @@
     margin-bottom: 1.5rem;
 }
 .reflection-notice p { margin: 0.25rem 0; }
+/* Who can see this submission — secondary to the links above it. */
+.reflection-notice .reflection-notice-hint {
+    margin-top: 0.5rem;
+    font-size: 0.875em;
+    opacity: 0.75;
+}
 .reflection-success   { background: #d5f4e6; border-left: 4px solid var(--rs-ok); }
 .reflection-error     { background: #fce8e8; border-left: 4px solid #d63638; }
 .reflection-info      { background: #f0f6fc; border-left: 4px solid var(--rs-info); }

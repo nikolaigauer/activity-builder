@@ -399,7 +399,7 @@ function reflsub_render_my_submissions_page() {
             $feedback       = get_post_meta( $sub->ID, '_reflsub_feedback', true );
             $feedback_date  = get_post_meta( $sub->ID, '_reflsub_feedback_date', true );
             $status_info    = $status_labels[ $sub->post_status ] ?? array( 'label' => ucfirst( $sub->post_status ), 'color' => '#646970' );
-            $view_url       = $sub->post_status === 'publish' ? get_permalink( $sub->ID ) : null;
+            $view_link      = reflsub_submission_view_link( $sub );
             $edit_url       = $source_page_id
                 ? add_query_arg( 'edit_submission', $sub->ID, get_permalink( $source_page_id ) )
                 : null;
@@ -430,12 +430,18 @@ function reflsub_render_my_submissions_page() {
                         <span style="color:#00a32a; font-weight:600;">● Feedback</span>
                         <?php endif; ?>
                     </div>
+                    <?php // Says who can see it, so "why isn't this on my blog?" answers itself. ?>
+                    <?php if ( $view_link && $view_link['hint'] ) : ?>
+                    <div style="font-size:12px; color:#646970; margin-top:4px;">
+                        <?php echo esc_html( $view_link['hint'] ); ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <div style="display:flex; gap:6px; flex-shrink:0;">
-                    <?php if ( $view_url ) : ?>
-                    <a href="<?php echo esc_url( $view_url ); ?>"
-                       class="button button-small" target="_blank">View</a>
+                    <?php if ( $view_link ) : ?>
+                    <a href="<?php echo esc_url( $view_link['url'] ); ?>"
+                       class="button button-small" target="_blank"><?php echo esc_html( $view_link['label'] ); ?></a>
                     <?php endif; ?>
                     <?php if ( $edit_url ) : ?>
                     <?php // An unsubmitted draft is resumed, not edited. ?>
