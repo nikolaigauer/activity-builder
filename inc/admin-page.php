@@ -112,10 +112,15 @@ function reflsub_render_submissions_page() {
                     wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ) );
                     echo '<div class="notice notice-success is-dismissible"><p><strong>Submission approved and published.</strong></p></div>';
                 } else {
+                    // Points at Quick Edit, not the block editor: the status
+                    // control there is a labelled "Private" checkbox plus a
+                    // Status dropdown, which is far easier to find than the
+                    // editor's Summary panel.
                     echo '<div class="notice notice-error is-dismissible"><p><strong>Not approved.</strong> '
                        . 'Only submissions awaiting review can be approved. Private submissions stay private by '
-                       . 'design, and a draft has not been handed in yet — to change a submission\'s status anyway, '
-                       . 'open it in the block editor.</p></div>';
+                       . 'design, and a draft has not been handed in yet. To change a submission\'s status anyway, '
+                       . 'find it under <strong>Posts</strong> and use <strong>Quick Edit</strong> — untick '
+                       . '&ldquo;Private&rdquo; and set the Status there.</p></div>';
                 }
             } elseif ( $action === 'trash' ) {
                 wp_trash_post( $post_id );

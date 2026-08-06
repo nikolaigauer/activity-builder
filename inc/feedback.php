@@ -354,9 +354,58 @@ function reflsub_render_feedback_page() {
 
 // ── Student "My Submissions" page ──────────────────────────────────────────────
 
+// Whether a student may change this submission's own visibility.
+//
+// Submission Privacy on the activity page sets the status a submission *starts*
+// in; it is a default chosen by the instructor, not a permanent seal. The work
+// belongs to the student, so they decide later whether it goes on their blog.
+// WordPress already agrees — an Author holds edit_post/publish_post over their
+// own posts — this only surfaces that in a place they can find, instead of
+// leaving Quick Edit as the only route.
+//
+// Deliberately limited to private <-> publish:
+//   pending — "awaiting instructor review". A student flipping that to publish
+//             would walk straight through the review gate, so pending is only
+//             ever changed by an instructor approving it.
+//   draft   — not handed in yet. Visibility is not a question until it is.
+function reflsub_student_can_change_visibility( $post ) {
+    $post = get_post( $post );
+
+    return $post
+        && in_array( $post->post_status, array( 'private', 'publish' ), true )
+        && (int) $post->post_author === get_current_user_id()
+        && get_post_meta( $post->ID, '_reflection_source_page', true )
+        && current_user_can( 'edit_post', $post->ID )
+        && current_user_can( 'publish_post', $post->ID );
+}
+
+
 function reflsub_render_my_submissions_page() {
 
     $user_id = get_current_user_id();
+
+    // ── Visibility toggle ─────────────────────────────────────────────────────
+    // Re-checked here and not merely where the button is drawn: the guard above
+    // is what actually authorises the change, the button only advertises it.
+    if ( isset( $_POST['reflsub_visibility'] )
+         && check_admin_referer( 'reflsub_visibility_action', 'reflsub_visibility_nonce' ) ) {
+
+        $target  = $_POST['reflsub_visibility'] === 'publish' ? 'publish' : 'private';
+        $post_id = intval( $_POST['reflsub_post_id'] ?? 0 );
+
+        if ( $post_id && reflsub_student_can_change_visibility( $post_id ) ) {
+            wp_update_post( array( 'ID' => $post_id, 'post_status' => $target ) );
+            printf(
+                '<div class="notice notice-success is-dismissible"><p><strong>%s</strong></p></div>',
+                esc_html( $target === 'publish'
+                    ? 'Published. This post now appears on your blog.'
+                    : 'Made private. Only you and your instructor can see this now.' )
+            );
+        } else {
+            echo '<div class="notice notice-error is-dismissible"><p><strong>That change was not made.</strong> '
+               . 'Work still awaiting your instructor\'s review cannot be published from here.</p></div>';
+        }
+    }
 
     $submissions = get_posts( array(
         'post_type'      => 'post',
@@ -446,6 +495,25 @@ function reflsub_render_my_submissions_page() {
                     <?php if ( $view_link ) : ?>
                     <a href="<?php echo esc_url( $view_link['url'] ); ?>"
                        class="button button-small" target="_blank"><?php echo esc_html( $view_link['label'] ); ?></a>
+                    <?php endif; ?>
+                    <?php if ( reflsub_student_can_change_visibility( $sub ) ) :
+                        $going_public = ( $sub->post_status === 'private' );
+                        // Only the outward-facing direction asks for confirmation —
+                        // making something private again is always recoverable.
+                        $confirm = $going_public
+                            ? 'Publish this to your blog? Anyone who can see your blog will be able to read it.'
+                            : '';
+                    ?>
+                    <form method="post" style="margin:0;"
+                          <?php if ( $confirm ) : ?>onsubmit="return confirm('<?php echo esc_js( $confirm ); ?>');"<?php endif; ?>>
+                        <?php wp_nonce_field( 'reflsub_visibility_action', 'reflsub_visibility_nonce' ); ?>
+                        <input type="hidden" name="reflsub_post_id" value="<?php echo esc_attr( $sub->ID ); ?>">
+                        <input type="hidden" name="reflsub_visibility"
+                               value="<?php echo $going_public ? 'publish' : 'private'; ?>">
+                        <button type="submit" class="button button-small">
+                            <?php echo $going_public ? 'Make public' : 'Make private'; ?>
+                        </button>
+                    </form>
                     <?php endif; ?>
                     <?php if ( $edit_url ) : ?>
                     <?php // An unsubmitted draft is resumed, not edited. ?>

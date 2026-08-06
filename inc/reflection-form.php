@@ -167,7 +167,10 @@ function reflsub_submission_view_link( $post ) {
             return array(
                 'url'   => get_permalink( $post->ID ),
                 'label' => 'View',
-                'hint'  => '',
+                // Stated rather than left implicit: students can now move work
+                // between public and private themselves, so both directions need
+                // to say plainly what they mean.
+                'hint'  => 'Published to your blog.',
             );
 
         case 'private':
