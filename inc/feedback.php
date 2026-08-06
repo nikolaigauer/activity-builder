@@ -68,7 +68,11 @@ function reflsub_save_feedback() {
     update_post_meta( $post_id, '_reflsub_feedback_date', time() );
     update_post_meta( $post_id, '_reflsub_feedback_by',   get_current_user_id() );
 
-    if ( $approve && $post->post_status !== 'publish' ) {
+    // Same gate as the Submissions list — "not already published" is far too wide
+    // a test, because it also catches private (confidential by instructor choice)
+    // and draft (not handed in). Feedback is still saved either way; only the
+    // publish is refused.
+    if ( $approve && reflsub_submission_can_be_approved( $post_id ) ) {
         wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ) );
     }
 
@@ -247,7 +251,7 @@ function reflsub_render_feedback_page() {
                                 onblur="this.style.borderColor='#c3c4c7'; this.style.boxShadow='';"
                             ><?php echo esc_textarea( $existing_feedback ); ?></textarea>
 
-                            <?php if ( in_array( $post->post_status, array( 'pending', 'private', 'draft' ), true ) ) : ?>
+                            <?php if ( reflsub_submission_can_be_approved( $post ) ) : ?>
                             <label style="display:flex; align-items:center; gap:8px; margin:12px 0 8px;
                                           font-size:13px; cursor:pointer; color:#1d2327; font-weight:normal;">
                                 <input type="checkbox" name="reflsub_feedback_approve" value="1">

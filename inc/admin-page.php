@@ -71,6 +71,31 @@ function reflsub_add_admin_menu() {
 
 // ── Submissions page ───────────────────────────────────────────────────────────
 
+// Approve means one specific thing: "an instructor has reviewed work that was
+// waiting for review, and is publishing it". Only `pending` is waiting for
+// review, so only `pending` may be approved.
+//
+// The other statuses are not merely unusual here, they are actively wrong:
+//   private — confidential by the instructor's own choice on the activity page.
+//             Approving it would publish one student's confidential work and
+//             silently contradict that page's Submission Privacy setting.
+//   draft   — the student has not handed it in yet. Approving would publish
+//             unfinished work on their behalf.
+//   publish — already published; nothing to approve.
+//
+// Both callers must consult this before offering the button AND before acting on
+// the POST. Hiding a button is not a control: the form can be replayed, and the
+// handler used to publish anything carrying `_reflection_source_page`.
+function reflsub_submission_can_be_approved( $post ) {
+    $post = get_post( $post );
+
+    return $post
+        && $post->post_status === 'pending'
+        && get_post_meta( $post->ID, '_reflection_source_page', true )
+        && current_user_can( 'edit_post', $post->ID );
+}
+
+
 function reflsub_render_submissions_page() {
 
     // ── Handle approve / trash actions ────────────────────────────────────────
@@ -81,8 +106,17 @@ function reflsub_render_submissions_page() {
         // Verify this is actually a reflection submission before acting
         if ( $post_id && get_post_meta( $post_id, '_reflection_source_page', true ) ) {
             if ( $action === 'approve' ) {
-                wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ) );
-                echo '<div class="notice notice-success is-dismissible"><p><strong>Submission approved and published.</strong></p></div>';
+                // Re-checked here, not just where the button is drawn — see the
+                // note on reflsub_submission_can_be_approved().
+                if ( reflsub_submission_can_be_approved( $post_id ) ) {
+                    wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ) );
+                    echo '<div class="notice notice-success is-dismissible"><p><strong>Submission approved and published.</strong></p></div>';
+                } else {
+                    echo '<div class="notice notice-error is-dismissible"><p><strong>Not approved.</strong> '
+                       . 'Only submissions awaiting review can be approved. Private submissions stay private by '
+                       . 'design, and a draft has not been handed in yet — to change a submission\'s status anyway, '
+                       . 'open it in the block editor.</p></div>';
+                }
             } elseif ( $action === 'trash' ) {
                 wp_trash_post( $post_id );
                 echo '<div class="notice notice-success is-dismissible"><p><strong>Submission moved to trash.</strong></p></div>';
@@ -295,10 +329,7 @@ function reflsub_render_submissions_page() {
                               <?php echo $has_feedback ? 'color:#00a32a; border-color:#00a32a;' : ''; ?>">
                         <?php echo $has_feedback ? '● Feedback' : 'Feedback'; ?>
                     </a>
-                    <?php // 'draft' is deliberately excluded: a draft is work the student
-                          // has NOT handed in, and Approve publishes. Approving one would
-                          // publish private work-in-progress on the student's behalf.
-                          if ( in_array( $sub->post_status, array( 'pending', 'private' ) ) ) : ?>
+                    <?php if ( reflsub_submission_can_be_approved( $sub ) ) : ?>
                     <form method="post" style="margin:0;">
                         <?php wp_nonce_field( 'reflsub_submission_action', 'reflsub_nonce' ); ?>
                         <input type="hidden" name="reflsub_action"  value="approve">
