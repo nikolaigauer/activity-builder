@@ -137,6 +137,59 @@ function reflsub_submission_editor_notice() {
 }
 
 
+// What a submission's status means for who can read it, in the student's own
+// terms. One source of truth: the My Submissions visibility band and every
+// success screen phrase it identically, so a student never sees the same state
+// described two ways.
+//
+// The wording is deliberately true under any site configuration. What
+// "published" actually reaches depends on the theme's site-privacy option and
+// the student's own portfolio flag — on a site marked private, a student whose
+// portfolio flag is on still has publicly readable posts. Rather than assert a
+// reach this function cannot verify, it describes the boundary it does know:
+// the blog. Naming the real audience would mean reading two theme-owned
+// settings, which is a deliberate future step, not an accident of wording.
+//
+// `tone` names a semantic token in tokens.css (--rs-ok / -warn / -info / -muted).
+//
+// @return array{label:string,tone:string,note:string}|null
+function reflsub_visibility_note( $post ) {
+    $post = get_post( $post );
+    if ( ! $post ) {
+        return null;
+    }
+
+    switch ( $post->post_status ) {
+        case 'publish':
+            return array(
+                'label' => 'Published',
+                'tone'  => 'ok',
+                'note'  => 'Anyone who can see your blog can read this.',
+            );
+        case 'private':
+            return array(
+                'label' => 'Private',
+                'tone'  => 'info',
+                'note'  => 'Only you and your instructor can read this.',
+            );
+        case 'pending':
+            return array(
+                'label' => 'Pending review',
+                'tone'  => 'warn',
+                'note'  => 'Waiting for your instructor to review. Not published yet.',
+            );
+        case 'draft':
+            return array(
+                'label' => 'Draft',
+                'tone'  => 'muted',
+                'note'  => 'Not submitted yet. Only you can see this.',
+            );
+    }
+
+    return null;
+}
+
+
 // A student must always be able to read back their own work, whatever status it
 // is sitting in — that is the whole point of the submission list. WordPress
 // already permits this: map_meta_cap() collapses `read_post` to plain `read` for
@@ -167,10 +220,10 @@ function reflsub_submission_view_link( $post ) {
             return array(
                 'url'   => get_permalink( $post->ID ),
                 'label' => 'View',
-                // Stated rather than left implicit: students can now move work
-                // between public and private themselves, so both directions need
-                // to say plainly what they mean.
-                'hint'  => 'Published to your blog.',
+                // Sourced from reflsub_visibility_note() so the success screens
+                // and the My Submissions band can never describe the same state
+                // two different ways.
+                'hint'  => reflsub_visibility_note( $post )['note'],
             );
 
         case 'private':
@@ -179,7 +232,7 @@ function reflsub_submission_view_link( $post ) {
             return array(
                 'url'   => get_permalink( $post->ID ),
                 'label' => 'View',
-                'hint'  => 'Only you and your instructor can see this.',
+                'hint'  => reflsub_visibility_note( $post )['note'],
             );
 
         case 'pending':
@@ -191,7 +244,7 @@ function reflsub_submission_view_link( $post ) {
             return array(
                 'url'   => get_preview_post_link( $post->ID ),
                 'label' => 'Preview',
-                'hint'  => 'Not published yet — visible to you and your instructor while it awaits approval.',
+                'hint'  => reflsub_visibility_note( $post )['note'],
             );
     }
 

@@ -422,12 +422,8 @@ function reflsub_render_my_submissions_page() {
         ),
     ) );
 
-    $status_labels = array(
-        'publish' => array( 'label' => 'Published',      'color' => '#00a32a' ),
-        'pending' => array( 'label' => 'Pending Review', 'color' => '#dba617' ),
-        'private' => array( 'label' => 'Private',        'color' => '#2271b1' ),
-        'draft'   => array( 'label' => 'Draft',          'color' => '#646970' ),
-    );
+    // Status labels and colours come from reflsub_visibility_note(), so the band
+    // below and the success screens cannot describe the same state differently.
     ?>
     <div class="wrap">
     <div class="reflsub-app">
@@ -451,7 +447,6 @@ function reflsub_render_my_submissions_page() {
             $source_url     = $source_page_id ? get_permalink( $source_page_id ) : null;
             $feedback       = get_post_meta( $sub->ID, '_reflsub_feedback', true );
             $feedback_date  = get_post_meta( $sub->ID, '_reflsub_feedback_date', true );
-            $status_info    = $status_labels[ $sub->post_status ] ?? array( 'label' => ucfirst( $sub->post_status ), 'color' => '#646970' );
             $view_link      = reflsub_submission_view_link( $sub );
             $edit_url       = $source_page_id
                 ? add_query_arg( 'edit_submission', $sub->ID, get_permalink( $source_page_id ) )
@@ -475,45 +470,23 @@ function reflsub_render_my_submissions_page() {
                         <?php endif; ?>
                         <span>·</span>
                         <span><?php echo esc_html( get_the_date( 'M j, Y', $sub->ID ) ); ?></span>
-                        <span>·</span>
-                        <span style="color:<?php echo esc_attr( $status_info['color'] ); ?>; font-weight:600;">
-                            <?php echo esc_html( $status_info['label'] ); ?>
-                        </span>
+                        <?php // Status has moved to the visibility band below — it and the
+                              // note about who can read this belong together, not scattered
+                              // across three places in the card. ?>
                         <?php if ( $feedback ) : ?>
-                        <span style="color:#00a32a; font-weight:600;">● Feedback</span>
+                        <span>·</span>
+                        <span style="color:#00a32a; font-weight:600;">Feedback</span>
                         <?php endif; ?>
                     </div>
-                    <?php // Says who can see it, so "why isn't this on my blog?" answers itself. ?>
-                    <?php if ( $view_link && $view_link['hint'] ) : ?>
-                    <div style="font-size:12px; color:#646970; margin-top:4px;">
-                        <?php echo esc_html( $view_link['hint'] ); ?>
-                    </div>
-                    <?php endif; ?>
                 </div>
 
+                <?php // Navigation only. The visibility control is deliberately not here:
+                      // View and Edit take you somewhere, publishing changes who can read
+                      // your writing, and the two should not look like the same kind of act. ?>
                 <div style="display:flex; gap:6px; flex-shrink:0;">
                     <?php if ( $view_link ) : ?>
                     <a href="<?php echo esc_url( $view_link['url'] ); ?>"
                        class="button button-small" target="_blank"><?php echo esc_html( $view_link['label'] ); ?></a>
-                    <?php endif; ?>
-                    <?php if ( reflsub_student_can_change_visibility( $sub ) ) :
-                        $going_public = ( $sub->post_status === 'private' );
-                        // Only the outward-facing direction asks for confirmation —
-                        // making something private again is always recoverable.
-                        $confirm = $going_public
-                            ? 'Publish this to your blog? Anyone who can see your blog will be able to read it.'
-                            : '';
-                    ?>
-                    <form method="post" style="margin:0;"
-                          <?php if ( $confirm ) : ?>onsubmit="return confirm('<?php echo esc_js( $confirm ); ?>');"<?php endif; ?>>
-                        <?php wp_nonce_field( 'reflsub_visibility_action', 'reflsub_visibility_nonce' ); ?>
-                        <input type="hidden" name="reflsub_post_id" value="<?php echo esc_attr( $sub->ID ); ?>">
-                        <input type="hidden" name="reflsub_visibility"
-                               value="<?php echo $going_public ? 'publish' : 'private'; ?>">
-                        <button type="submit" class="button button-small">
-                            <?php echo $going_public ? 'Make public' : 'Make private'; ?>
-                        </button>
-                    </form>
                     <?php endif; ?>
                     <?php if ( $edit_url ) : ?>
                     <?php // An unsubmitted draft is resumed, not edited. ?>
@@ -524,6 +497,39 @@ function reflsub_render_my_submissions_page() {
                     <?php endif; ?>
                 </div>
             </div>
+
+            <?php $vis = reflsub_visibility_note( $sub ); ?>
+            <?php if ( $vis ) : ?>
+            <div class="reflsub-visibility reflsub-visibility--<?php echo esc_attr( $vis['tone'] ); ?>">
+                <p class="reflsub-visibility-state">
+                    <strong><?php echo esc_html( $vis['label'] ); ?></strong>
+                    <span>— <?php echo esc_html( $vis['note'] ); ?></span>
+                </p>
+                <?php if ( reflsub_student_can_change_visibility( $sub ) ) :
+                    $going_public = ( $sub->post_status === 'private' );
+                    // Only the outward-facing direction asks for confirmation —
+                    // making something private again is always recoverable.
+                    $confirm = $going_public
+                        ? 'Publish this to your blog? Anyone who can see your blog will be able to read it.'
+                        : '';
+                ?>
+                <form method="post"
+                      <?php if ( $confirm ) : ?>onsubmit="return confirm('<?php echo esc_js( $confirm ); ?>');"<?php endif; ?>>
+                    <?php wp_nonce_field( 'reflsub_visibility_action', 'reflsub_visibility_nonce' ); ?>
+                    <input type="hidden" name="reflsub_post_id" value="<?php echo esc_attr( $sub->ID ); ?>">
+                    <input type="hidden" name="reflsub_visibility"
+                           value="<?php echo $going_public ? 'publish' : 'private'; ?>">
+                    <?php // Asymmetric on purpose: going public is the consequential,
+                          // outward step and gets a real button; going private is the safe
+                          // retreat and stays quiet, so neither reads as the default. ?>
+                    <button type="submit"
+                            class="<?php echo $going_public ? 'button button-primary' : 'reflsub-visibility-quiet'; ?>">
+                        <?php echo $going_public ? 'Publish to my blog' : 'Make private'; ?>
+                    </button>
+                </form>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
 
             <?php if ( $feedback ) : ?>
             <details>

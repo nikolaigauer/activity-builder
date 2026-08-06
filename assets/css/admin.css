@@ -376,3 +376,54 @@
 /* Variant for icons near the right edge (builder sidebar): grow leftward. */
 .reflsub-tip--left .reflsub-tip-text { left: auto; right: -8px; transform: none; }
 .reflsub-tip--left .reflsub-tip-text::after { left: auto; right: 11px; margin-left: 0; }
+
+
+/* ── My Submissions: visibility band ─────────────────────────────
+   State and its control live together at the foot of each card, mirroring the
+   Instructor Feedback band above it. Deliberately separate from View/Edit:
+   those navigate, this changes who can read the student's writing, and the two
+   should not read as the same kind of act. Tone maps to the status tokens. */
+.reflsub-visibility {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    padding: 11px 20px;
+    border-top: 1px solid var(--rs-g200);
+    border-left: 3px solid var(--rs-muted);
+    background: var(--rs-g50);
+}
+.reflsub-visibility--ok    { border-left-color: var(--rs-ok); }
+.reflsub-visibility--warn  { border-left-color: var(--rs-warn); }
+.reflsub-visibility--info  { border-left-color: var(--rs-info); }
+.reflsub-visibility--muted { border-left-color: var(--rs-muted); }
+
+.reflsub-visibility-state {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--rs-g500);
+}
+.reflsub-visibility-state strong { color: var(--rs-muted); }
+.reflsub-visibility--ok    .reflsub-visibility-state strong { color: var(--rs-ok); }
+.reflsub-visibility--warn  .reflsub-visibility-state strong { color: var(--rs-warn); }
+.reflsub-visibility--info  .reflsub-visibility-state strong { color: var(--rs-info); }
+
+.reflsub-visibility form { margin: 0; flex-shrink: 0; }
+
+/* The retreat direction stays a quiet text button — going private should never
+   compete for attention with going public. */
+.reflsub-visibility-quiet {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--rs-g500);
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color var(--rs-t);
+}
+.reflsub-visibility-quiet:hover,
+.reflsub-visibility-quiet:focus { color: var(--rs-accent); }
