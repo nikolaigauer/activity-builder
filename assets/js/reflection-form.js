@@ -96,10 +96,21 @@
         // States where the server now holds the text, so the local copy is stale
         // and must not be restored over it: a completed submit, a completed edit,
         // or a saved server-side draft.
-        var REFLSUB_TERMINAL = /(?:reflection_submitted|reflection_updated|reflection_draft_saved)=1/;
+        //
+        // Test for the parameter's PRESENCE, mirroring the PHP, which branches on
+        // isset( $_GET[...] ). The value is the new post's ID, not a bare '1' (see
+        // the redirects in inc/reflection-form.php) — an earlier /=1/ regex here
+        // therefore only cleared the draft when the ID happened to *start* with a
+        // 1, which is why this reproduced on production but not on small local
+        // databases.
+        var REFLSUB_TERMINAL_PARAMS = [ 'reflection_submitted', 'reflection_updated', 'reflection_draft_saved' ];
+        var reflsubQuery = new URLSearchParams( window.location.search );
+        var reflsubIsTerminal = REFLSUB_TERMINAL_PARAMS.some( function ( key ) {
+            return reflsubQuery.has( key );
+        } );
 
         if ( draftKey ) {
-            if ( REFLSUB_TERMINAL.test( window.location.search ) ) {
+            if ( reflsubIsTerminal ) {
                 // Runs whether or not a form is on the page — this is the fix.
                 localStorage.removeItem( draftKey );
             } else if ( form ) {
