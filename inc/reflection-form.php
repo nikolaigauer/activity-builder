@@ -500,6 +500,24 @@ function reflsub_render_student_block( $block_id, $state ) {
 }
 
 
+/**
+ * Render a student's plain-text answer as safe HTML for post content.
+ *
+ * Escape, then linkify, then break lines. The linkify step is load-bearing: it
+ * stops a pasted URL from ever sitting alone inside its own <p>. Core's
+ * WP_Embed::autoembed() deliberately matches exactly that shape and swaps in an
+ * oEmbed card — and for a URL on our own network that card is a <blockquote>
+ * plus an absolutely-positioned <iframe>. Neither is legal inside <p>, so the
+ * browser closes the paragraph early, the iframe leaves the normal flow, and
+ * two empty paragraphs are left behind for every URL. Wrapping the URL in an
+ * <a> first means the regex no longer matches and the answer stays ordinary
+ * flow content that the stylesheet can reason about.
+ */
+function reflsub_format_response_html( $text ) {
+    return nl2br( make_clickable( esc_html( $text ) ) );
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: check if the current user has already submitted for a page
 // ─────────────────────────────────────────────────────────────────────────────
@@ -619,28 +637,28 @@ function reflsub_handle_reflection_submission() {
     if ( $prompt_1 && $response_1 ) {
         $content_parts[] = sprintf(
             "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
-            esc_html( $prompt_1 ), nl2br( esc_html( $response_1 ) )
+            esc_html( $prompt_1 ), reflsub_format_response_html( $response_1 )
         );
     } elseif ( $response_1 ) {
-        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response_1 ) ) );
+        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", reflsub_format_response_html( $response_1 ) );
     }
 
     if ( $prompt_2 && $response_2 ) {
         $content_parts[] = sprintf(
             "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
-            esc_html( $prompt_2 ), nl2br( esc_html( $response_2 ) )
+            esc_html( $prompt_2 ), reflsub_format_response_html( $response_2 )
         );
     } elseif ( $response_2 ) {
-        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response_2 ) ) );
+        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", reflsub_format_response_html( $response_2 ) );
     }
 
     if ( $prompt_3 && $response_3 ) {
         $content_parts[] = sprintf(
             "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
-            esc_html( $prompt_3 ), nl2br( esc_html( $response_3 ) )
+            esc_html( $prompt_3 ), reflsub_format_response_html( $response_3 )
         );
     } elseif ( $response_3 ) {
-        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response_3 ) ) );
+        $content_parts[] = sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", reflsub_format_response_html( $response_3 ) );
     }
 
     if ( $video_url ) {
@@ -806,9 +824,9 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 $ordered_parts[ $i ] = $label
                     ? sprintf(
                         "<!-- wp:paragraph {\"className\":\"reflsub-prompt-label\"} -->\n<p class=\"reflsub-prompt-label\">%s</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
-                        esc_html( $label ), nl2br( esc_html( $response ) )
+                        esc_html( $label ), reflsub_format_response_html( $response )
                     )
-                    : sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", nl2br( esc_html( $response ) ) );
+                    : sprintf( "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->", reflsub_format_response_html( $response ) );
             }
         }
 
@@ -1152,7 +1170,7 @@ function reflsub_handle_sections_submission( $page_id, $user_id, $sections, $red
                 if ( $p === '' ) continue;
                 $para_html[] = sprintf(
                     "<!-- wp:paragraph -->\n<p>%s</p>\n<!-- /wp:paragraph -->",
-                    nl2br( esc_html( $p ) )
+                    reflsub_format_response_html( $p )
                 );
             }
             if ( $para_html ) {

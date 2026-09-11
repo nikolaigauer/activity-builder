@@ -725,7 +725,7 @@ function reflsub_handle_create_post() {
             foreach ( $paragraphs as $para ) {
                 $para = trim( $para );
                 if ( $para === '' ) continue;
-                $content_parts[] = '<!-- wp:paragraph --><p>' . nl2br( esc_html( $para ) ) . '</p><!-- /wp:paragraph -->';
+                $content_parts[] = '<!-- wp:paragraph --><p>' . reflsub_format_response_html( $para ) . '</p><!-- /wp:paragraph -->';
             }
         }
 
